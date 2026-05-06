@@ -80,7 +80,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["PLR2004", "S101"]
+"tests/**" = ["PLR2004", "S101", "ARG001", "ARG002"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bench_kit"]
 
 [tool.ruff.format]
 quote-style = "double"

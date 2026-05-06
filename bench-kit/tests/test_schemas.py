@@ -13,8 +13,9 @@ from typing import Any
 
 import pytest
 import yaml
-from bench_kit.schemas import load_schema
 from jsonschema import Draft202012Validator
+
+from bench_kit.schemas import load_schema
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
