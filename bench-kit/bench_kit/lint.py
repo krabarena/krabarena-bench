@@ -58,6 +58,7 @@ _FORBIDDEN_CALLS: frozenset[tuple[str, str]] = frozenset(
 _FORBIDDEN_BUILTINS: frozenset[str] = frozenset({"eval", "exec", "compile", "__import__", "open"})
 
 # Acceptable image reference: ``<repo>[/<repo>...]@sha256:<64 hex>``.
+# Re-used by ``validate`` for compose service images.
 _IMAGE_DIGEST_RE = re.compile(
     r"^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$",
     flags=re.IGNORECASE,
@@ -69,17 +70,21 @@ class LintIssue:
     """One static-check finding.
 
     Codes follow the ``BK###`` family so they can be referenced in
-    PR review comments and stable across releases.
+    PR review comments and stable across releases. ``line``/``col``
+    default to ``0`` for findings without a meaningful source position
+    (most file-level issues raised by ``validate``).
     """
 
     path: Path
-    line: int
-    col: int
     code: str
     message: str
+    line: int = 0
+    col: int = 0
 
     def __str__(self) -> str:
-        return f"{self.path}:{self.line}:{self.col}: {self.code} {self.message}"
+        if self.line or self.col:
+            return f"{self.path}:{self.line}:{self.col}: {self.code} {self.message}"
+        return f"{self.path}: {self.code} {self.message}"
 
 
 def _root_module(name: str) -> str:
@@ -214,7 +219,6 @@ def _check_image_attr(tree: ast.AST, path: Path) -> list[LintIssue]:
             LintIssue(
                 path=path,
                 line=1,
-                col=0,
                 code="BK004",
                 message=(
                     "no `image` attribute found on any class; every runner module "
@@ -246,9 +250,7 @@ def lint_runner_file(path: Path) -> list[LintIssue]:
     try:
         source = path.read_text(encoding="utf-8")
     except OSError as exc:
-        return [
-            LintIssue(path=path, line=0, col=0, code="BK005", message=f"cannot read file: {exc}")
-        ]
+        return [LintIssue(path=path, code="BK005", message=f"cannot read file: {exc}")]
     try:
         tree = ast.parse(source, filename=str(path))
     except SyntaxError as exc:
@@ -277,19 +279,12 @@ def lint_runners_dir(runners_dir: Path) -> list[LintIssue]:
     issues: list[LintIssue] = []
     if not runners_dir.is_dir():
         return [
-            LintIssue(
-                path=runners_dir,
-                line=0,
-                col=0,
-                code="BK006",
-                message="runners directory does not exist",
-            )
+            LintIssue(path=runners_dir, code="BK006", message="runners directory does not exist")
         ]
     for py in sorted(runners_dir.glob("*.py")):
+        # Leading-underscore files are scaffolding, not real runners; they are
+        # excluded from `bench validate` but still subject to ruff/mypy.
         if py.name.startswith("_"):
-            # Convention: leading-underscore files are scaffolding/helpers,
-            # not real runners. They are excluded from `bench validate`
-            # but still subject to other CI checks (ruff/mypy).
             continue
         issues.extend(lint_runner_file(py))
     return issues

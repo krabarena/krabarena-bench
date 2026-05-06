@@ -8,21 +8,16 @@ function and CI rejects any report with issues.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 
-from bench_kit.lint import LintIssue, lint_runners_dir
+from bench_kit.lint import _IMAGE_DIGEST_RE, LintIssue, lint_runners_dir
 from bench_kit.schemas import load_schema
-
-_IMAGE_DIGEST_RE = re.compile(
-    r"^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$",
-    flags=re.IGNORECASE,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,13 +45,7 @@ def validate_battle(battle_dir: Path) -> ValidationReport:
 
     if not battle_dir.is_dir():
         issues.append(
-            LintIssue(
-                path=battle_dir,
-                line=0,
-                col=0,
-                code="BK040",
-                message="battle directory does not exist",
-            )
+            LintIssue(path=battle_dir, code="BK040", message="battle directory does not exist")
         )
         return ValidationReport(battle_dir=battle_dir, issues=issues)
 
@@ -75,7 +64,6 @@ def validate_battle(battle_dir: Path) -> ValidationReport:
     compose_path = battle_dir / str(compose_rel)
     fixture_services = _validate_compose(compose_path, issues)
 
-    # Cross-check tasks reference services that actually exist.
     if fixture_services is not None:
         for task_id, task in task_data_by_id.items():
             svc = task.get("fixture_service")
@@ -83,8 +71,6 @@ def validate_battle(battle_dir: Path) -> ValidationReport:
                 issues.append(
                     LintIssue(
                         path=tasks_dir / f"{task_id}.yaml",
-                        line=0,
-                        col=0,
                         code="BK022",
                         message=(
                             f"fixture_service {svc!r} not declared in "
@@ -96,63 +82,79 @@ def validate_battle(battle_dir: Path) -> ValidationReport:
     return ValidationReport(battle_dir=battle_dir, issues=issues)
 
 
+def _load_yaml_mapping(
+    path: Path,
+    code: str,
+    missing_msg: str,
+    issues: list[LintIssue],
+) -> dict[str, Any] | None:
+    """Load ``path`` as a YAML mapping, recording any failure as an issue.
+
+    Returns ``None`` if the file is missing, malformed, or whose root
+    is not a mapping. The three failure modes share the issue ``code``
+    so callers can scope all "this YAML file is unusable" reports under
+    one stable identifier (BK010 / BK020 / BK030).
+    """
+    if not path.is_file():
+        issues.append(LintIssue(path=path, code=code, message=missing_msg))
+        return None
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        issues.append(LintIssue(path=path, code=code, message=f"YAML error: {exc}"))
+        return None
+    if not isinstance(data, dict):
+        issues.append(
+            LintIssue(
+                path=path,
+                code=code,
+                message="must be a YAML mapping at the top level",
+            )
+        )
+        return None
+    return data
+
+
+def _emit_schema_errors(
+    path: Path,
+    validator: Draft202012Validator,
+    data: dict[str, Any],
+    code: str,
+    issues: list[LintIssue],
+) -> None:
+    """Append one :class:`LintIssue` per JSON Schema violation."""
+
+    def _key(err: ValidationError) -> tuple[Any, ...]:
+        return tuple(err.absolute_path)
+
+    for err in sorted(validator.iter_errors(data), key=_key):
+        loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
+        issues.append(
+            LintIssue(
+                path=path,
+                code=code,
+                message=f"schema violation at {loc}: {err.message}",
+            )
+        )
+
+
 def _validate_meta(
     meta_path: Path,
     battle_dir: Path,
     issues: list[LintIssue],
 ) -> dict[str, Any] | None:
-    if not meta_path.is_file():
-        issues.append(
-            LintIssue(
-                path=meta_path,
-                line=0,
-                col=0,
-                code="BK010",
-                message="meta.yaml is missing",
-            )
-        )
-        return None
-    try:
-        with meta_path.open(encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-    except yaml.YAMLError as exc:
-        issues.append(
-            LintIssue(path=meta_path, line=0, col=0, code="BK010", message=f"YAML error: {exc}")
-        )
-        return None
-    if not isinstance(data, dict):
-        issues.append(
-            LintIssue(
-                path=meta_path,
-                line=0,
-                col=0,
-                code="BK010",
-                message="meta.yaml must be a YAML mapping at the top level",
-            )
-        )
+    data = _load_yaml_mapping(meta_path, "BK010", "meta.yaml is missing", issues)
+    if data is None:
         return None
 
-    schema = load_schema("meta")
-    validator = Draft202012Validator(schema)
-    for err in sorted(validator.iter_errors(data), key=lambda e: e.absolute_path):
-        loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
-        issues.append(
-            LintIssue(
-                path=meta_path,
-                line=0,
-                col=0,
-                code="BK010",
-                message=f"schema violation at {loc}: {err.message}",
-            )
-        )
+    validator = Draft202012Validator(load_schema("meta"))
+    _emit_schema_errors(meta_path, validator, data, "BK010", issues)
 
-    # Slug coherence: meta.slug should match the directory name.
     if isinstance(data.get("slug"), str) and data["slug"] != battle_dir.name:
         issues.append(
             LintIssue(
                 path=meta_path,
-                line=0,
-                col=0,
                 code="BK011",
                 message=(
                     f"meta.slug={data['slug']!r} does not match directory name {battle_dir.name!r}"
@@ -170,58 +172,22 @@ def _validate_tasks(
     out: dict[str, dict[str, Any]] = {}
     if not tasks_dir.is_dir():
         issues.append(
-            LintIssue(
-                path=tasks_dir,
-                line=0,
-                col=0,
-                code="BK020",
-                message="tasks directory does not exist",
-            )
+            LintIssue(path=tasks_dir, code="BK020", message="tasks directory does not exist")
         )
         return out
 
-    schema = load_schema("task")
-    validator = Draft202012Validator(schema)
+    validator = Draft202012Validator(load_schema("task"))
 
     yaml_files = sorted(p for p in tasks_dir.glob("*.yaml") if not p.name.startswith("_"))
     for path in yaml_files:
-        try:
-            with path.open(encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-        except yaml.YAMLError as exc:
-            issues.append(
-                LintIssue(path=path, line=0, col=0, code="BK020", message=f"YAML error: {exc}")
-            )
+        data = _load_yaml_mapping(path, "BK020", f"{path.name} is missing", issues)
+        if data is None:
             continue
-        if not isinstance(data, dict):
-            issues.append(
-                LintIssue(
-                    path=path,
-                    line=0,
-                    col=0,
-                    code="BK020",
-                    message="task YAML must be a mapping at the top level",
-                )
-            )
-            continue
-        for err in sorted(validator.iter_errors(data), key=lambda e: e.absolute_path):
-            loc = "/".join(str(p) for p in err.absolute_path) or "<root>"
-            issues.append(
-                LintIssue(
-                    path=path,
-                    line=0,
-                    col=0,
-                    code="BK020",
-                    message=f"schema violation at {loc}: {err.message}",
-                )
-            )
-        # id must match the filename stem.
+        _emit_schema_errors(path, validator, data, "BK020", issues)
         if isinstance(data.get("id"), str) and data["id"] != path.stem:
             issues.append(
                 LintIssue(
                     path=path,
-                    line=0,
-                    col=0,
                     code="BK021",
                     message=(f"task id {data['id']!r} does not match filename stem {path.stem!r}"),
                 )
@@ -236,74 +202,17 @@ def _validate_compose(
     issues: list[LintIssue],
 ) -> set[str] | None:
     """Validate ``fixtures/compose.yml`` and return its service names."""
-    if not compose_path.is_file():
-        issues.append(
-            LintIssue(
-                path=compose_path,
-                line=0,
-                col=0,
-                code="BK030",
-                message="compose file is missing",
-            )
-        )
-        return None
-    try:
-        with compose_path.open(encoding="utf-8") as f:
-            compose = yaml.safe_load(f)
-    except yaml.YAMLError as exc:
-        issues.append(
-            LintIssue(path=compose_path, line=0, col=0, code="BK030", message=f"YAML error: {exc}")
-        )
-        return None
-    if not isinstance(compose, dict):
-        issues.append(
-            LintIssue(
-                path=compose_path,
-                line=0,
-                col=0,
-                code="BK030",
-                message="compose file must be a YAML mapping at the top level",
-            )
-        )
+    compose = _load_yaml_mapping(compose_path, "BK030", "compose file is missing", issues)
+    if compose is None:
         return None
 
-    networks = compose.get("networks")
-    if not isinstance(networks, dict) or not networks:
-        issues.append(
-            LintIssue(
-                path=compose_path,
-                line=0,
-                col=0,
-                code="BK031",
-                message=(
-                    "compose file must declare at least one network with `internal: true`; "
-                    "fixture services may not have egress"
-                ),
-            )
-        )
-    else:
-        for net_name, net_cfg in networks.items():
-            if not isinstance(net_cfg, dict) or not net_cfg.get("internal", False):
-                issues.append(
-                    LintIssue(
-                        path=compose_path,
-                        line=0,
-                        col=0,
-                        code="BK031",
-                        message=(
-                            f"network {net_name!r} must declare `internal: true` to "
-                            f"prevent egress from fixture services"
-                        ),
-                    )
-                )
+    _check_compose_networks(compose_path, compose, issues)
 
     services = compose.get("services")
     if not isinstance(services, dict) or not services:
         issues.append(
             LintIssue(
                 path=compose_path,
-                line=0,
-                col=0,
                 code="BK032",
                 message="compose file must declare at least one service",
             )
@@ -319,6 +228,39 @@ def _validate_compose(
     return service_names
 
 
+def _check_compose_networks(
+    compose_path: Path,
+    compose: dict[str, Any],
+    issues: list[LintIssue],
+) -> None:
+    """Every declared network must be ``internal: true`` — fixtures may not egress."""
+    networks = compose.get("networks")
+    if not isinstance(networks, dict) or not networks:
+        issues.append(
+            LintIssue(
+                path=compose_path,
+                code="BK031",
+                message=(
+                    "compose file must declare at least one network with `internal: true`; "
+                    "fixture services may not have egress"
+                ),
+            )
+        )
+        return
+    for net_name, net_cfg in networks.items():
+        if not isinstance(net_cfg, dict) or not net_cfg.get("internal", False):
+            issues.append(
+                LintIssue(
+                    path=compose_path,
+                    code="BK031",
+                    message=(
+                        f"network {net_name!r} must declare `internal: true` to "
+                        f"prevent egress from fixture services"
+                    ),
+                )
+            )
+
+
 def _check_compose_service(
     compose_path: Path,
     name: str,
@@ -330,8 +272,6 @@ def _check_compose_service(
         issues.append(
             LintIssue(
                 path=compose_path,
-                line=0,
-                col=0,
                 code="BK032",
                 message=f"service {name!r} must be a mapping",
             )
@@ -343,8 +283,6 @@ def _check_compose_service(
         issues.append(
             LintIssue(
                 path=compose_path,
-                line=0,
-                col=0,
                 code="BK032",
                 message=(
                     f"service {name!r} must declare either `image:` "
@@ -358,8 +296,6 @@ def _check_compose_service(
             issues.append(
                 LintIssue(
                     path=compose_path,
-                    line=0,
-                    col=0,
                     code="BK033",
                     message=(
                         f"service {name!r} image {image!r} must be sha256-pinned: "
