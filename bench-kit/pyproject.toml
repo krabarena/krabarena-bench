@@ -7,7 +7,7 @@ name = "krabarena-bench-kit"
 version = "0.1.0.dev0"
 description = "Reference implementation of the krabarena-bench specification"
 readme = "../README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "Apache-2.0"
 authors = [{ name = "Keenable AI" }]
 keywords = ["benchmark", "krabarena", "ai-agents"]
@@ -15,12 +15,13 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
     "jsonschema>=4.21",
+    "packaging>=23.0",
     "pyyaml>=6.0",
 ]
 
@@ -54,7 +55,7 @@ packages = ["bench_kit"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 src = ["bench_kit", "tests"]
 
 [tool.ruff.lint]
@@ -80,7 +81,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["PLR2004", "S101"]
+"tests/**" = ["PLR2004", "S101", "ARG001", "ARG002"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bench_kit"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -91,7 +95,7 @@ indent-style = "space"
 # ---------------------------------------------------------------------
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_unused_configs = true
 warn_redundant_casts = true

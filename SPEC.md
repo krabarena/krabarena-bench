@@ -167,7 +167,12 @@ tolerances:
 ```
 
 `tolerances` MAY be tightened per-Battle but never loosened beyond
-the bench-kit defaults. `bench validate` enforces this.
+the bench-kit defaults. The schema's `maximum:` for each tolerance
+key **is** the bench-kit default — there is no separate "default"
+constant elsewhere; the schema is the single source of truth.
+A Battle that sets `wall_clock_ms_p50: 0.30` (= max) is using the
+default; anything below is a tightening; anything above is a schema
+violation. `bench validate` enforces this through the schema.
 
 ---
 

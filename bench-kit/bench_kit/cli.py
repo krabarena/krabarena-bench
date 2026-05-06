@@ -1,0 +1,135 @@
+"""``bench`` command-line entrypoint.
+
+This module is the only public CLI surface of bench-kit. Subcommands
+delegate into pure-Python helpers that are independently testable;
+the CLI itself is a thin argparse wrapper.
+
+Stubs for ``run``, ``package``, and ``verify`` are present so that
+``bench --help`` matches the documented surface from day one; their
+implementations land in a follow-up PR alongside the sandboxed
+container exec helper.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+from bench_kit import SPEC_VERSION, __version__
+from bench_kit.init import InitError, init_battle
+from bench_kit.validate import validate_battle
+
+EXIT_OK = 0
+EXIT_VALIDATION_FAILED = 1
+EXIT_USAGE = 2
+EXIT_NOT_IMPLEMENTED = 3
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    handler = getattr(args, "_handler", None)
+    if handler is None:
+        parser.print_help()
+        return EXIT_USAGE
+    return int(handler(args))
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="bench",
+        description="krabarena-bench reference CLI",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"bench-kit {__version__} (spec {SPEC_VERSION})",
+    )
+    sub = parser.add_subparsers(dest="command", metavar="<command>")
+
+    _add_init(sub)
+    _add_validate(sub)
+    _add_stub(sub, "run", "execute a Battle's runners and produce result.json")
+    _add_stub(sub, "package", "bundle a result.json into a Claim artefact (claim.tar.gz)")
+    _add_stub(sub, "verify", "reproduce a Claim bundle and emit a verify-result.json")
+    return parser
+
+
+def _add_init(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser("init", help="scaffold a new artefact")
+    init_sub = p.add_subparsers(dest="kind", metavar="<kind>")
+
+    battle = init_sub.add_parser("battle", help="scaffold a new containerised Battle")
+    battle.add_argument("slug", help="slug for the Battle (becomes battles/<slug>/)")
+    battle.add_argument(
+        "--battle-id",
+        required=True,
+        help="UUID of the Battle on krabarena.org (from `krab battle create`)",
+    )
+    battle.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="parent directory; battles/<slug>/ is created under it (default: cwd)",
+    )
+    battle.set_defaults(_handler=_handle_init_battle)
+
+
+def _add_validate(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser("validate", help="run static checks against a Battle directory")
+    p.add_argument("battle_dir", type=Path, help="path to battles/<slug>/")
+    p.set_defaults(_handler=_handle_validate)
+
+
+def _add_stub(
+    sub: argparse._SubParsersAction[argparse.ArgumentParser],
+    name: str,
+    help_text: str,
+) -> None:
+    p = sub.add_parser(name, help=help_text)
+    p.set_defaults(_handler=_handle_stub, _stub_name=name)
+
+
+def _handle_init_battle(args: argparse.Namespace) -> int:
+    try:
+        target = init_battle(args.slug, args.battle_id, parent_dir=args.out)
+    except InitError as exc:
+        print(f"bench init: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    print(f"created {target}")
+    print(
+        "next steps:\n"
+        "  1. edit meta.yaml — fill in title, tags, optional metrics\n"
+        "  2. write tasks/*.yaml and runners/*.py for your tools\n"
+        "  3. configure fixtures/compose.yml (internal: true networks)\n"
+        "  4. run `bench validate` from the repo root"
+    )
+    return EXIT_OK
+
+
+def _handle_validate(args: argparse.Namespace) -> int:
+    report = validate_battle(args.battle_dir)
+    if report.ok:
+        print(f"{report.battle_dir}: ok")
+        return EXIT_OK
+    for issue in report.issues:
+        print(str(issue), file=sys.stderr)
+    print(
+        f"\n{report.battle_dir}: {len(report.issues)} issue(s); see above",
+        file=sys.stderr,
+    )
+    return EXIT_VALIDATION_FAILED
+
+
+def _handle_stub(args: argparse.Namespace) -> int:
+    print(
+        f"bench {args._stub_name}: not yet implemented (lands in next PR)",
+        file=sys.stderr,
+    )
+    return EXIT_NOT_IMPLEMENTED
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://krabarena.org/schemas/bench/task.schema.json",
+  "title": "krabarena-bench task YAML",
+  "description": "One scenario every tool must run. Conforms to AUTHORING_BATTLES §6.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "title",
+    "description",
+    "fixture_service",
+    "success_predicate",
+    "timeout_s",
+    "iterations",
+    "limits"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Slug-form task identifier; matches the YAML filename stem."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "minLength": 8
+    },
+    "fixture_service": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Name of the Compose service in fixtures/compose.yml that this task targets."
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Free-form, task-specific inputs passed to the runner.",
+      "additionalProperties": true
+    },
+    "expected": {
+      "type": "object",
+      "description": "Free-form, task-specific expected outputs used by success_predicate.",
+      "additionalProperties": true
+    },
+    "success_predicate": {
+      "type": "string",
+      "minLength": 2,
+      "description": "Python expression evaluated against the runner's structured output. Must be deterministic and side-effect-free."
+    },
+    "timeout_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1800,
+      "description": "Hard wall-clock cap for a single iteration."
+    },
+    "iterations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "description": "Number of independent iterations. Same value for every tool — the framework forbids per-tool overrides."
+    },
+    "limits": {
+      "type": "object",
+      "required": ["memory_mb", "cpus"],
+      "additionalProperties": false,
+      "properties": {
+        "memory_mb": { "type": "integer", "minimum": 64, "maximum": 32768 },
+        "cpus": { "type": "number", "minimum": 0.1, "maximum": 16 }
+      }
+    }
+  }
+}
