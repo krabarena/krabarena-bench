@@ -15,7 +15,10 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
+from bench_kit import __version__ as _BENCH_KIT_VERSION
 from bench_kit.lint import _IMAGE_DIGEST_RE, LintIssue, lint_runners_dir
 from bench_kit.schemas import load_schema
 
@@ -200,7 +203,53 @@ def _validate_meta(
                 ),
             )
         )
+
+    spec_str = data.get("bench_kit_version")
+    if isinstance(spec_str, str):
+        _check_bench_kit_compatibility(meta_path, spec_str, issues)
     return data
+
+
+def _check_bench_kit_compatibility(
+    meta_path: Path,
+    spec_str: str,
+    issues: list[LintIssue],
+) -> None:
+    """Per SPEC §8, refuse to validate a Battle whose declared
+    ``bench_kit_version`` range does not include the running version.
+
+    Compares against the *release* portion of ``bench_kit.__version__``
+    so a dev pre-release (``0.1.0.dev0``) of an in-range version
+    satisfies a range like ``>=0.1.0,<0.2.0`` — we do not want every
+    dev install to fail validation against a published Battle.
+    """
+    try:
+        specifier = SpecifierSet(spec_str)
+    except InvalidSpecifier as exc:
+        issues.append(
+            LintIssue(
+                path=meta_path,
+                code="BK012",
+                message=f"bench_kit_version is not a valid PEP 440 specifier: {exc}",
+            )
+        )
+        return
+    try:
+        running = Version(_BENCH_KIT_VERSION)
+    except InvalidVersion:
+        return
+    release = Version(".".join(str(p) for p in running.release))
+    if release not in specifier:
+        issues.append(
+            LintIssue(
+                path=meta_path,
+                code="BK012",
+                message=(
+                    f"running bench-kit {_BENCH_KIT_VERSION} does not satisfy "
+                    f"bench_kit_version={spec_str!r}; install a compatible version"
+                ),
+            )
+        )
 
 
 def _validate_tasks(

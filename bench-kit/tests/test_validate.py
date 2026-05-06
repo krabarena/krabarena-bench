@@ -143,6 +143,24 @@ def test_compose_service_references_non_internal_network(clean_battle: Path) -> 
     assert any(i.code == "BK034" for i in report.issues)
 
 
+def test_bench_kit_version_out_of_range_rejected(clean_battle: Path) -> None:
+    def mut(data: dict[str, object]) -> None:
+        data["bench_kit_version"] = ">=99.0.0"
+
+    _patch_yaml(clean_battle / "meta.yaml", mut)
+    report = validate_battle(clean_battle)
+    assert any(i.code == "BK012" for i in report.issues)
+
+
+def test_bench_kit_version_invalid_specifier_rejected(clean_battle: Path) -> None:
+    def mut(data: dict[str, object]) -> None:
+        data["bench_kit_version"] = "not a real specifier"
+
+    _patch_yaml(clean_battle / "meta.yaml", mut)
+    report = validate_battle(clean_battle)
+    assert any(i.code == "BK012" for i in report.issues)
+
+
 def test_path_escape_via_compose_rejected(clean_battle: Path) -> None:
     def mut(data: dict[str, object]) -> None:
         fixtures = data["fixtures"]
