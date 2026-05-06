@@ -143,6 +143,26 @@ def test_compose_service_references_non_internal_network(clean_battle: Path) -> 
     assert any(i.code == "BK034" for i in report.issues)
 
 
+def test_path_escape_via_compose_rejected(clean_battle: Path) -> None:
+    def mut(data: dict[str, object]) -> None:
+        fixtures = data["fixtures"]
+        assert isinstance(fixtures, dict)
+        fixtures["compose"] = "x/../../outside.yml"
+
+    _patch_yaml(clean_battle / "meta.yaml", mut)
+    report = validate_battle(clean_battle)
+    assert any(i.code == "BK041" for i in report.issues)
+
+
+def test_path_escape_via_tasks_dir_rejected(clean_battle: Path) -> None:
+    def mut(data: dict[str, object]) -> None:
+        data["tasks_dir"] = "../tasks"
+
+    _patch_yaml(clean_battle / "meta.yaml", mut)
+    report = validate_battle(clean_battle)
+    assert any(i.code == "BK041" for i in report.issues)
+
+
 def test_runner_with_forbidden_import_rejected(clean_battle: Path) -> None:
     runner_path = clean_battle / "runners" / "example.py"
     body = runner_path.read_text(encoding="utf-8")

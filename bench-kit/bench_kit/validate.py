@@ -52,19 +52,20 @@ def validate_battle(battle_dir: Path) -> ValidationReport:
     meta_path = battle_dir / "meta.yaml"
     meta_data = _validate_meta(meta_path, battle_dir, issues)
 
-    tasks_dir_name = (meta_data or {}).get("tasks_dir", "tasks")
-    tasks_dir = battle_dir / str(tasks_dir_name)
-    task_data_by_id = _validate_tasks(tasks_dir, issues)
+    tasks_dir = _resolve_in_battle(battle_dir, (meta_data or {}).get("tasks_dir", "tasks"), issues)
+    task_data_by_id = _validate_tasks(tasks_dir, issues) if tasks_dir is not None else {}
 
-    runners_dir_name = (meta_data or {}).get("runners_dir", "runners")
-    runners_dir = battle_dir / str(runners_dir_name)
-    issues.extend(lint_runners_dir(runners_dir))
+    runners_dir = _resolve_in_battle(
+        battle_dir, (meta_data or {}).get("runners_dir", "runners"), issues
+    )
+    if runners_dir is not None:
+        issues.extend(lint_runners_dir(runners_dir))
 
     compose_rel = (meta_data or {}).get("fixtures", {}).get("compose", "fixtures/compose.yml")
-    compose_path = battle_dir / str(compose_rel)
-    fixture_services = _validate_compose(compose_path, issues)
+    compose_path = _resolve_in_battle(battle_dir, compose_rel, issues)
+    fixture_services = _validate_compose(compose_path, issues) if compose_path is not None else None
 
-    if fixture_services is not None:
+    if fixture_services is not None and tasks_dir is not None and compose_path is not None:
         for task_id, task in task_data_by_id.items():
             svc = task.get("fixture_service")
             if isinstance(svc, str) and svc not in fixture_services:
@@ -80,6 +81,44 @@ def validate_battle(battle_dir: Path) -> ValidationReport:
                 )
 
     return ValidationReport(battle_dir=battle_dir, issues=issues)
+
+
+def _resolve_in_battle(
+    battle_dir: Path,
+    relative: object,
+    issues: list[LintIssue],
+) -> Path | None:
+    """Resolve ``relative`` against ``battle_dir`` and require containment.
+
+    A malicious or accidental ``meta.yaml`` could point ``tasks_dir``,
+    ``runners_dir`` or ``fixtures.compose`` at a path containing ``..``
+    and escape the battle directory; ``bench validate`` would then read
+    and validate files outside the battle. Reject anything whose
+    resolved form is not within ``battle_dir``.
+    """
+    if not isinstance(relative, str):
+        issues.append(
+            LintIssue(
+                path=battle_dir,
+                code="BK041",
+                message=f"path must be a string, got {type(relative).__name__}",
+            )
+        )
+        return None
+    candidate = (battle_dir / relative).resolve()
+    if candidate != battle_dir and battle_dir not in candidate.parents:
+        issues.append(
+            LintIssue(
+                path=battle_dir,
+                code="BK041",
+                message=(
+                    f"path {relative!r} resolves outside the battle directory; "
+                    f"`..` segments and absolute paths are not allowed"
+                ),
+            )
+        )
+        return None
+    return candidate
 
 
 def _load_yaml_mapping(
