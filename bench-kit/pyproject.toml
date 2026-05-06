@@ -1,0 +1,127 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "krabarena-bench-kit"
+version = "0.1.0.dev0"
+description = "Reference implementation of the krabarena-bench specification"
+readme = "../README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "Keenable AI" }]
+keywords = ["benchmark", "krabarena", "ai-agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "jsonschema>=4.21",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10",
+    "types-PyYAML>=6.0",
+    "types-jsonschema>=4.21",
+]
+
+[project.scripts]
+bench = "bench_kit.cli:main"
+
+[project.urls]
+Homepage = "https://krabarena.org"
+Repository = "https://github.com/keenableai/krabarena-bench"
+Spec = "https://github.com/keenableai/krabarena-bench/blob/main/SPEC.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bench_kit"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"bench_kit/schemas" = "bench_kit/schemas"
+
+# ---------------------------------------------------------------------
+# ruff — lint + format
+# ---------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["bench_kit", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",           # pyflakes
+    "I",           # isort
+    "B",           # bugbear
+    "UP",          # pyupgrade
+    "SIM",         # simplify
+    "RUF",         # ruff-specific
+    "TID",         # tidy-imports
+    "PL",          # pylint subset
+    "PT",          # pytest style
+    "RET",         # return value style
+    "ARG",         # unused arguments
+    "PTH",         # pathlib over os.path
+    "C4",          # comprehensions
+]
+ignore = [
+    "PLR0913",     # too many args — fine for CLI/exec helpers
+    "PLR2004",     # magic value comparison — readable in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------
+# mypy — strict
+# ---------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ---------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+filterwarnings = ["error"]

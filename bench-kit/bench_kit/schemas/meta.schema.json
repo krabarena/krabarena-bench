@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://krabarena.org/schemas/bench/meta.schema.json",
+  "title": "krabarena-bench meta.yaml",
+  "description": "Per-Battle metadata. Conforms to SPEC.md §4.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "battle_id",
+    "slug",
+    "kind",
+    "title",
+    "tags",
+    "bench_kit_version",
+    "tasks_dir",
+    "runners_dir",
+    "fixtures",
+    "tolerances"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "battle_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "kind": {
+      "const": "containerised"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "uniqueItems": true
+    },
+    "bench_kit_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "PEP 440 version specifier, e.g. \">=0.1.0,<0.2.0\"."
+    },
+    "tasks_dir": {
+      "type": "string",
+      "default": "tasks",
+      "pattern": "^[a-z][a-z0-9_/-]*$"
+    },
+    "runners_dir": {
+      "type": "string",
+      "default": "runners",
+      "pattern": "^[a-z][a-z0-9_/-]*$"
+    },
+    "fixtures": {
+      "type": "object",
+      "required": ["compose"],
+      "additionalProperties": false,
+      "properties": {
+        "compose": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_/.-]*\\.ya?ml$"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "optional": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "tokens_in",
+              "tokens_out",
+              "cost_cents",
+              "requests_made",
+              "network_egress_bytes"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "tolerances": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Allowed relative deviation per metric for verify. May be tightened beyond defaults but never loosened.",
+      "properties": {
+        "success_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0,
+          "description": "Always 0 — success rate must match exactly."
+        },
+        "wall_clock_ms_p50": { "type": "number", "minimum": 0, "maximum": 0.30 },
+        "wall_clock_ms_p95": { "type": "number", "minimum": 0, "maximum": 0.40 },
+        "peak_rss_mb": { "type": "number", "minimum": 0, "maximum": 0.30 },
+        "cpu_time_ms_p50": { "type": "number", "minimum": 0, "maximum": 0.30 },
+        "throughput": { "type": "number", "minimum": 0, "maximum": 0.30 }
+      }
+    }
+  }
+}
