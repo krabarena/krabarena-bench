@@ -206,7 +206,7 @@ def _validate_compose(
     if compose is None:
         return None
 
-    _check_compose_networks(compose_path, compose, issues)
+    internal_networks = _check_compose_networks(compose_path, compose, issues)
 
     services = compose.get("services")
     if not isinstance(services, dict) or not services:
@@ -224,7 +224,7 @@ def _validate_compose(
         if not isinstance(svc_name, str):
             continue
         service_names.add(svc_name)
-        issues.extend(_check_compose_service(compose_path, svc_name, svc_cfg))
+        issues.extend(_check_compose_service(compose_path, svc_name, svc_cfg, internal_networks))
     return service_names
 
 
@@ -232,8 +232,16 @@ def _check_compose_networks(
     compose_path: Path,
     compose: dict[str, Any],
     issues: list[LintIssue],
-) -> None:
-    """Every declared network must be ``internal: true`` — fixtures may not egress."""
+) -> set[str]:
+    """Validate the ``networks:`` block and return the set of internal network names.
+
+    A "network is internal" iff it is declared with ``internal: true``.
+    Returning the set lets ``_check_compose_service`` enforce that
+    every service's ``networks:`` membership is a subset of it —
+    catching services that silently fall onto Compose's default
+    egress-enabled bridge network.
+    """
+    internal: set[str] = set()
     networks = compose.get("networks")
     if not isinstance(networks, dict) or not networks:
         issues.append(
@@ -246,9 +254,13 @@ def _check_compose_networks(
                 ),
             )
         )
-        return
+        return internal
     for net_name, net_cfg in networks.items():
-        if not isinstance(net_cfg, dict) or not net_cfg.get("internal", False):
+        if not isinstance(net_name, str):
+            continue
+        if isinstance(net_cfg, dict) and net_cfg.get("internal", False):
+            internal.add(net_name)
+        else:
             issues.append(
                 LintIssue(
                     path=compose_path,
@@ -259,12 +271,14 @@ def _check_compose_networks(
                     ),
                 )
             )
+    return internal
 
 
 def _check_compose_service(
     compose_path: Path,
     name: str,
     cfg: object,
+    internal_networks: set[str],
 ) -> list[LintIssue]:
     """Validate a single service entry in compose.yml."""
     issues: list[LintIssue] = []
@@ -300,6 +314,82 @@ def _check_compose_service(
                     message=(
                         f"service {name!r} image {image!r} must be sha256-pinned: "
                         f"`<repo>@sha256:<64-hex>`"
+                    ),
+                )
+            )
+    issues.extend(_check_service_network_isolation(compose_path, name, cfg, internal_networks))
+    return issues
+
+
+def _check_service_network_isolation(
+    compose_path: Path,
+    name: str,
+    cfg: dict[str, Any],
+    internal_networks: set[str],
+) -> list[LintIssue]:
+    """Reject services that can reach the host network or Compose's default bridge.
+
+    Containment requires three things: (1) no ``network_mode`` (any value
+    bypasses the per-network isolation Compose builds for us); (2) an
+    explicit ``networks:`` member, otherwise Compose attaches the
+    service to its default bridge with egress; (3) every referenced
+    network is one of the ``internal: true`` ones declared at the top
+    of the file.
+    """
+    issues: list[LintIssue] = []
+    if "network_mode" in cfg:
+        issues.append(
+            LintIssue(
+                path=compose_path,
+                code="BK034",
+                message=(
+                    f"service {name!r} declares `network_mode`, which bypasses "
+                    f"the per-network isolation required by SPEC §6"
+                ),
+            )
+        )
+    raw = cfg.get("networks")
+    if raw is None:
+        issues.append(
+            LintIssue(
+                path=compose_path,
+                code="BK034",
+                message=(
+                    f"service {name!r} must declare `networks:` listing only "
+                    f"`internal: true` networks; without it Compose attaches "
+                    f"the default egress-enabled bridge"
+                ),
+            )
+        )
+        return issues
+    if isinstance(raw, list | dict):
+        referenced = [str(n) for n in raw if isinstance(n, str)]
+    else:
+        issues.append(
+            LintIssue(
+                path=compose_path,
+                code="BK034",
+                message=f"service {name!r}: `networks:` must be a list or mapping",
+            )
+        )
+        return issues
+    if not referenced:
+        issues.append(
+            LintIssue(
+                path=compose_path,
+                code="BK034",
+                message=f"service {name!r}: `networks:` must reference at least one network",
+            )
+        )
+    for net in referenced:
+        if net not in internal_networks:
+            issues.append(
+                LintIssue(
+                    path=compose_path,
+                    code="BK034",
+                    message=(
+                        f"service {name!r} references non-internal network {net!r}; "
+                        f"only `internal: true` networks are allowed"
                     ),
                 )
             )

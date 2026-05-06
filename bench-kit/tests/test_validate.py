@@ -107,6 +107,42 @@ def test_compose_image_not_digest_pinned(clean_battle: Path) -> None:
     assert any(i.code == "BK033" for i in report.issues)
 
 
+def test_compose_service_network_mode_rejected(clean_battle: Path) -> None:
+    def mut(data: dict[str, object]) -> None:
+        services = data["services"]
+        assert isinstance(services, dict)
+        services["example"]["network_mode"] = "host"
+
+    _patch_yaml(clean_battle / "fixtures" / "compose.yml", mut)
+    report = validate_battle(clean_battle)
+    assert any(i.code == "BK034" for i in report.issues)
+
+
+def test_compose_service_missing_networks_rejected(clean_battle: Path) -> None:
+    def mut(data: dict[str, object]) -> None:
+        services = data["services"]
+        assert isinstance(services, dict)
+        del services["example"]["networks"]
+
+    _patch_yaml(clean_battle / "fixtures" / "compose.yml", mut)
+    report = validate_battle(clean_battle)
+    assert any(i.code == "BK034" for i in report.issues)
+
+
+def test_compose_service_references_non_internal_network(clean_battle: Path) -> None:
+    def mut(data: dict[str, object]) -> None:
+        nets = data["networks"]
+        assert isinstance(nets, dict)
+        nets["egress"] = {"internal": False}
+        services = data["services"]
+        assert isinstance(services, dict)
+        services["example"]["networks"] = ["egress"]
+
+    _patch_yaml(clean_battle / "fixtures" / "compose.yml", mut)
+    report = validate_battle(clean_battle)
+    assert any(i.code == "BK034" for i in report.issues)
+
+
 def test_runner_with_forbidden_import_rejected(clean_battle: Path) -> None:
     runner_path = clean_battle / "runners" / "example.py"
     body = runner_path.read_text(encoding="utf-8")
