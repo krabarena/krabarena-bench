@@ -198,9 +198,13 @@ def plan(slug: str, battle_id: str, parent_dir: Path) -> InitPlan:
 
 def apply_plan(p: InitPlan) -> None:
     """Materialise an :class:`InitPlan` on disk."""
-    if p.target_dir.exists() and any(p.target_dir.iterdir()):
-        msg = f"refusing to overwrite non-empty directory {p.target_dir}"
-        raise InitError(msg)
+    if p.target_dir.exists():
+        if not p.target_dir.is_dir():
+            msg = f"target {p.target_dir} exists and is not a directory"
+            raise InitError(msg)
+        if any(p.target_dir.iterdir()):
+            msg = f"refusing to overwrite non-empty directory {p.target_dir}"
+            raise InitError(msg)
     p.target_dir.mkdir(parents=True, exist_ok=True)
     for rel, content in p.files.items():
         full = p.target_dir / rel

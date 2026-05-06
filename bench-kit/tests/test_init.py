@@ -70,3 +70,10 @@ def test_init_refuses_to_overwrite_nonempty(tmp_path: Path) -> None:
     (target_parent / "existing.txt").write_text("not empty", encoding="utf-8")
     with pytest.raises(InitError, match="non-empty"):
         init_battle("browsers", _GOOD_UUID, parent_dir=tmp_path)
+
+
+def test_init_refuses_when_target_is_a_file(tmp_path: Path) -> None:
+    (tmp_path / "battles").mkdir()
+    (tmp_path / "battles" / "browsers").write_text("oops", encoding="utf-8")
+    with pytest.raises(InitError, match="not a directory"):
+        init_battle("browsers", _GOOD_UUID, parent_dir=tmp_path)
