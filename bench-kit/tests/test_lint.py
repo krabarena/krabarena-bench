@@ -65,6 +65,11 @@ def test_forbidden_imports_rejected(tmp_path: Path, import_line: str) -> None:
         ("eval('1+1')\n", "BK002"),
         ("exec('x=1')\n", "BK002"),
         ("__import__('socket')\n", "BK002"),
+        # Bypass forms must also be caught — see SPEC §5.1.
+        ("from os import system\nsystem('echo hi')\n", "BK002"),
+        ("from os import popen as p\np('ls')\n", "BK002"),
+        ("import os as o\no.system('echo hi')\n", "BK002"),
+        ("from os import system as s\ns('echo hi')\n", "BK002"),
     ],
 )
 def test_forbidden_calls_rejected(tmp_path: Path, body_extra: str, expect: str) -> None:

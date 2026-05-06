@@ -130,15 +130,75 @@ def _check_imports(tree: ast.AST, path: Path) -> list[LintIssue]:
     return issues
 
 
+def _resolve_call_aliases(
+    tree: ast.AST,
+) -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
+    """Walk module-level imports and build two alias tables.
+
+    Without this resolution step the call-check sees only the source
+    spelling (``os.system(...)``) and misses the bypass forms
+    ``from os import system; system(...)`` or
+    ``import os as o; o.system(...)``.
+
+    Returns ``(module_aliases, function_aliases)`` where:
+
+    * ``module_aliases[local] = canonical`` — e.g. ``{"o": "os"}`` from
+      ``import os as o``. Looking up ``o.system`` then resolves to
+      ``("os", "system")``.
+    * ``function_aliases[local] = (module, attr)`` — e.g. ``{"system":
+      ("os", "system")}`` from ``from os import system``. A bare call
+      ``system(...)`` then resolves to a forbidden ``(module, attr)``
+      pair without any attribute access.
+    """
+    module_aliases: dict[str, str] = {}
+    function_aliases: dict[str, tuple[str, str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split(".", 1)[0]
+                module_aliases[local] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                local = alias.asname or alias.name
+                function_aliases[local] = (module, alias.name)
+    return module_aliases, function_aliases
+
+
 def _check_calls(tree: ast.AST, path: Path) -> list[LintIssue]:
     issues: list[LintIssue] = []
+    module_aliases, function_aliases = _resolve_call_aliases(tree)
+
+    def _flag(node: ast.Call, label: str, kind: str) -> None:
+        issues.append(
+            LintIssue(
+                path=path,
+                line=node.lineno,
+                col=node.col_offset,
+                code="BK002",
+                message=(
+                    f"forbidden {kind} {label}(): "
+                    f"runners must use bench_kit.exec for process launches"
+                ),
+            )
+        )
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-            pair = (func.value.id, func.attr)
+            base = module_aliases.get(func.value.id, func.value.id)
+            pair = (base, func.attr)
             if pair in _FORBIDDEN_CALLS:
+                _flag(node, f"{pair[0]}.{pair[1]}", "call")
+        elif isinstance(func, ast.Name):
+            resolved = function_aliases.get(func.id)
+            if resolved is not None and resolved in _FORBIDDEN_CALLS:
+                _flag(node, f"{resolved[0]}.{resolved[1]}", "call")
+            elif func.id in _FORBIDDEN_BUILTINS:
                 issues.append(
                     LintIssue(
                         path=path,
@@ -146,25 +206,12 @@ def _check_calls(tree: ast.AST, path: Path) -> list[LintIssue]:
                         col=node.col_offset,
                         code="BK002",
                         message=(
-                            f"forbidden call {pair[0]}.{pair[1]}(): "
-                            f"runners must use bench_kit.exec for process launches"
+                            f"forbidden builtin {func.id}(): "
+                            f"runners must not perform dynamic code execution or open "
+                            f"host files directly"
                         ),
                     )
                 )
-        elif isinstance(func, ast.Name) and func.id in _FORBIDDEN_BUILTINS:
-            issues.append(
-                LintIssue(
-                    path=path,
-                    line=node.lineno,
-                    col=node.col_offset,
-                    code="BK002",
-                    message=(
-                        f"forbidden builtin {func.id}(): "
-                        f"runners must not perform dynamic code execution or open "
-                        f"host files directly"
-                    ),
-                )
-            )
     return issues
 
 
