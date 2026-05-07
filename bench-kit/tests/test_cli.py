@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from bench_kit.cli import (
-    EXIT_NOT_IMPLEMENTED,
     EXIT_OK,
     EXIT_USAGE,
     EXIT_VALIDATION_FAILED,
@@ -96,9 +95,3 @@ def test_validate_dirty_battle(tmp_path: Path) -> None:
     (target / "meta.yaml").unlink()
     rc = main(["validate", str(target)])
     assert rc == EXIT_VALIDATION_FAILED
-
-
-@pytest.mark.parametrize("cmd", ["verify"])
-def test_unimplemented_subcommands_exit_with_code(cmd: str) -> None:
-    rc = main([cmd])
-    assert rc == EXIT_NOT_IMPLEMENTED

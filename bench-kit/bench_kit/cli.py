@@ -22,6 +22,7 @@ from bench_kit.init import InitError, init_battle
 from bench_kit.package import PackageError, package_bundle
 from bench_kit.run import RunError, RunOptions, run_battle
 from bench_kit.validate import validate_battle
+from bench_kit.verify import VerifyError, verify_bundle
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1
@@ -56,7 +57,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_validate(sub)
     _add_run(sub)
     _add_package(sub)
-    _add_stub(sub, "verify", "reproduce a Claim bundle and emit a verify-result.json")
+    _add_verify(sub)
     return parser
 
 
@@ -128,6 +129,27 @@ def _add_package(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> No
     p.set_defaults(_handler=_handle_package)
 
 
+def _add_verify(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser(
+        "verify",
+        help="reproduce a Claim bundle and emit a verify-result.json",
+    )
+    p.add_argument("bundle", type=Path, help="path to claim.tar.gz")
+    p.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        help="local checkout of battle_repo at exactly battle_commit",
+    )
+    p.add_argument(
+        "--output",
+        type=Path,
+        default=Path("verify-result.json"),
+        help="output verify-result.json path (default: ./verify-result.json)",
+    )
+    p.set_defaults(_handler=_handle_verify)
+
+
 def _add_stub(
     sub: argparse._SubParsersAction[argparse.ArgumentParser],
     name: str,
@@ -195,6 +217,21 @@ def _handle_package(args: argparse.Namespace) -> int:
         return EXIT_RUNTIME_FAILED
     print(f"wrote {out}")
     return EXIT_OK
+
+
+def _handle_verify(args: argparse.Namespace) -> int:
+    try:
+        report = verify_bundle(
+            args.bundle,
+            source_dir=args.source,
+            output_path=args.output,
+        )
+    except VerifyError as exc:
+        print(f"bench verify: {exc}", file=sys.stderr)
+        return EXIT_RUNTIME_FAILED
+    print(f"verdict: {report.verdict}")
+    print(f"wrote {args.output}")
+    return EXIT_OK if report.verdict == "match" else EXIT_VALIDATION_FAILED
 
 
 def _handle_stub(args: argparse.Namespace) -> int:
