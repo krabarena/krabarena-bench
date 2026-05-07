@@ -249,6 +249,16 @@ def test_run_battle_filters_by_tools(battle_with_fake_runner: Path) -> None:
         run_battle(battle_with_fake_runner, RunOptions(tools=("nonexistent",)))
 
 
+def test_run_battle_rejects_results_dir_outside_battle(
+    battle_with_fake_runner: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    up, down = _stub_compose(battle_with_fake_runner)
+    with up, down, pytest.raises(RunError, match="outside the battle directory"):
+        run_battle(battle_with_fake_runner, RunOptions(results_dir=outside))
+
+
 def test_run_battle_fails_on_validation(tmp_path: Path) -> None:
     target = init_battle("browsers", _GOOD_UUID, parent_dir=tmp_path)
     (target / "meta.yaml").unlink()  # make validation fail

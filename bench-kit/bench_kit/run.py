@@ -81,7 +81,7 @@ def run_battle(battle_dir: Path, options: RunOptions | None = None) -> Path:
             msg = f"no runners matched --tools={opts.tools!r}"
             raise RunError(msg)
 
-    results_dir = (opts.results_dir or (battle_dir / "results")).resolve()
+    results_dir = _resolve_results_dir(battle_dir, opts.results_dir)
     if results_dir.exists():
         shutil.rmtree(results_dir)
     results_dir.mkdir(parents=True)
@@ -127,6 +127,27 @@ def run_battle(battle_dir: Path, options: RunOptions | None = None) -> Path:
     out = results_dir / "result.json"
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return out
+
+
+def _resolve_results_dir(battle_dir: Path, override: Path | None) -> Path:
+    """Resolve the results root, refusing values outside ``battle_dir``.
+
+    The orchestrator wipes whatever ``results_dir`` points at before
+    every run; without containment, ``--results-dir /`` would call
+    ``shutil.rmtree("/")``. Force the override to be a path under
+    ``battle_dir`` (or use the canonical ``<battle_dir>/results`` if
+    none was given).
+    """
+    if override is None:
+        return (battle_dir / "results").resolve()
+    candidate = override.resolve()
+    if candidate == battle_dir or not candidate.is_relative_to(battle_dir):
+        msg = (
+            f"--results-dir {override} resolves outside the battle directory; "
+            f"refusing to wipe arbitrary paths"
+        )
+        raise RunError(msg)
+    return candidate
 
 
 # ---------------------------------------------------------------------------
