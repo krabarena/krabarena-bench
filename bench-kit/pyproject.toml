@@ -129,3 +129,6 @@ addopts = [
     "--strict-config",
 ]
 filterwarnings = ["error"]
+markers = [
+    "docker: requires a running docker daemon (skipped on hosts without one)",
+]
