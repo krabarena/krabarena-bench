@@ -172,13 +172,12 @@ class _FakeRunner:
     image = _VALID_IMAGE
 
     def run(self, task: Task) -> RunResult:
-        log = task.results_dir / "log.jsonl"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        log.write_text('{"fake": true}\n', encoding="utf-8")
+        task.results_dir.mkdir(parents=True, exist_ok=True)
+        (task.results_dir / "log.jsonl").write_text('{"fake": true}\n', encoding="utf-8")
         return RunResult(
             success=True,
             metrics=RunMetrics(wall_clock_ms=42, peak_rss_mb=10, cpu_time_ms=30),
-            logs_path=log,
+            logs_path=task.results_dir,
         )
 
 
@@ -197,13 +196,12 @@ def battle_with_fake_runner(tmp_path: Path) -> Path:
                 image = "{_VALID_IMAGE}"
 
                 def run(self, task: Task) -> RunResult:
-                    log = task.results_dir / "log.jsonl"
-                    log.parent.mkdir(parents=True, exist_ok=True)
-                    log.write_text('{{}}\\n', encoding="utf-8")
+                    task.results_dir.mkdir(parents=True, exist_ok=True)
+                    (task.results_dir / "log.jsonl").write_text('{{}}\\n', encoding="utf-8")
                     return RunResult(
                         success=True,
                         metrics=RunMetrics(wall_clock_ms=42, peak_rss_mb=10, cpu_time_ms=30),
-                        logs_path=log,
+                        logs_path=task.results_dir,
                     )
             """
         ).lstrip(),

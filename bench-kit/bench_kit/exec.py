@@ -394,9 +394,12 @@ def run_task_in_sandbox(
 
     The log file is JSONL at ``<task.results_dir>/log.jsonl`` with one
     record carrying exit code, timeout flag, stdout, stderr, and the
-    raw metric samples. The returned ``RunResult.logs_path`` is the
-    absolute path to that file; the orchestrator translates it to the
-    schema-required relative form when assembling ``result.json``.
+    metric samples. The returned ``RunResult.logs_path`` is
+    ``task.results_dir`` itself — the **directory** containing the
+    log, plus any artefacts a runner might add later (screenshots,
+    traces). The orchestrator records that directory in
+    ``result.json``'s ``logs_path`` field, matching the schema's
+    ``runs/...`` shape.
     """
     result = run_constrained(
         image=image,
@@ -435,7 +438,7 @@ def run_task_in_sandbox(
             peak_rss_mb=result.peak_rss_mb,
             cpu_time_ms=result.cpu_time_ms,
         ),
-        logs_path=log_path,
+        logs_path=task.results_dir,
     )
 
 
