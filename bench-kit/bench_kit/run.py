@@ -24,6 +24,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -435,6 +436,9 @@ def _tool_version(image: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+_GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
 def _git_rev_parse_head(path: Path) -> str:
     proc = subprocess.run(
         ["git", "-C", str(path), "rev-parse", "HEAD"],
@@ -444,15 +448,18 @@ def _git_rev_parse_head(path: Path) -> str:
         check=False,
     )
     out = proc.stdout.strip()
-    if proc.returncode != 0 or len(out) != 40:
-        # Tests and ad-hoc runs often have no git context; emit a synthetic
-        # 40-char zero SHA so the schema still passes. `bench package` will
-        # later refuse to build a Claim bundle from such a result, since the
-        # commit cannot be cloned by a verifier.
-        if "GIT_COMMIT" in os.environ:
-            return os.environ["GIT_COMMIT"]
-        return "0" * 40
-    return out
+    if proc.returncode == 0 and _GIT_SHA_RE.match(out):
+        return out
+    # Tests and ad-hoc runs often have no git context; emit a synthetic
+    # 40-char zero SHA so the schema still passes. `bench package` will
+    # later refuse to build a Claim bundle from such a result, since the
+    # commit cannot be cloned by a verifier. ``GIT_COMMIT`` honoured for
+    # CI environments that resolve the SHA out-of-band, but only when it
+    # matches the schema's strict 40-lowercase-hex shape.
+    override = os.environ.get("GIT_COMMIT", "").strip()
+    if _GIT_SHA_RE.match(override):
+        return override
+    return "0" * 40
 
 
 __all__ = ["RunError", "RunOptions", "run_battle"]
