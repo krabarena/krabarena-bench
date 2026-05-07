@@ -61,7 +61,14 @@ def _cpu_model() -> str:
 
 
 def _mem_total_mb() -> int:
-    """Total physical RAM in MiB, integer."""
+    """Total physical RAM in MiB, integer.
+
+    Falls back to ``1`` (not ``0``) when neither ``/proc/meminfo`` nor
+    ``sysctl hw.memsize`` is available, because the result schema
+    requires ``mem_total_mb >= 1``. A nonsense-but-valid value keeps
+    `bench run` going on niche hosts; the bundle will record it as
+    `1` rather than failing schema validation.
+    """
     meminfo = Path("/proc/meminfo")
     if meminfo.is_file():
         for line in meminfo.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -69,7 +76,7 @@ def _mem_total_mb() -> int:
                 parts = line.split()
                 if len(parts) >= 2 and parts[1].isdigit():
                     # MemTotal is in kB.
-                    return int(parts[1]) // 1024
+                    return max(int(parts[1]) // 1024, 1)
     try:
         proc = subprocess.run(
             ["sysctl", "-n", "hw.memsize"],
@@ -79,11 +86,11 @@ def _mem_total_mb() -> int:
             check=False,
         )
     except (FileNotFoundError, subprocess.SubprocessError):
-        return 0
+        return 1
     out = proc.stdout.strip()
     if out.isdigit():
-        return int(out) // (1024 * 1024)
-    return 0
+        return max(int(out) // (1024 * 1024), 1)
+    return 1
 
 
 def _docker_version() -> str:
