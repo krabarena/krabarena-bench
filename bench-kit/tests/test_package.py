@@ -145,3 +145,20 @@ def test_package_is_byte_deterministic(tmp_path: Path) -> None:
 def test_read_bundle_meta_rejects_missing_file(tmp_path: Path) -> None:
     with pytest.raises(PackageError, match="does not exist"):
         read_bundle_meta(tmp_path / "nope.tar.gz")
+
+
+def test_read_bundle_meta_rejects_non_gzip(tmp_path: Path) -> None:
+    bad = tmp_path / "claim.tar.gz"
+    bad.write_bytes(b"this is plainly not gzipped data")
+    with pytest.raises(PackageError, match="not a valid gzip"):
+        read_bundle_meta(bad)
+
+
+def test_read_bundle_meta_rejects_truncated_tar(tmp_path: Path) -> None:
+    """A valid gzip stream containing junk bytes should produce
+    a clean PackageError, not a raw TarError."""
+    bad = tmp_path / "claim.tar.gz"
+    with gzip.open(bad, "wb") as f:
+        f.write(b"definitely not a tar stream")
+    with pytest.raises(PackageError, match="not a valid tar"):
+        read_bundle_meta(bad)

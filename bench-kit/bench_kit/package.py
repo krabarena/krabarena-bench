@@ -156,22 +156,47 @@ def read_bundle_json(bundle_path: Path, member: str) -> dict[str, Any]:
     the latter pulls ``result.json`` from the same bundle. Centralising
     keeps the gzip+tar+JSON-decode boilerplate (and its error paths) in
     one place.
+
+    Every reasonable failure mode (missing file, not gzip, malformed
+    tar, missing member, unreadable member, malformed JSON, non-utf8
+    bytes) is converted into a :class:`PackageError` so callers (and
+    therefore the CLI) never see a raw stdlib traceback.
     """
     if not bundle_path.is_file():
         msg = f"bundle does not exist: {bundle_path}"
         raise PackageError(msg)
-    with gzip.open(bundle_path, "rb") as gz, tarfile.open(fileobj=gz, mode="r") as tar:
-        try:
-            entry = tar.getmember(member)
-        except KeyError as exc:
-            msg = f"bundle missing {member}: {bundle_path}"
-            raise PackageError(msg) from exc
-        f = tar.extractfile(entry)
-        if f is None:
-            msg = f"bundle {member} could not be opened"
-            raise PackageError(msg)
-        out: dict[str, Any] = json.loads(f.read().decode("utf-8"))
-        return out
+    try:
+        with (
+            gzip.open(bundle_path, "rb") as gz,
+            tarfile.open(fileobj=gz, mode="r") as tar,
+        ):
+            try:
+                entry = tar.getmember(member)
+            except KeyError as exc:
+                msg = f"bundle missing {member}: {bundle_path}"
+                raise PackageError(msg) from exc
+            f = tar.extractfile(entry)
+            if f is None:
+                msg = f"bundle {member} could not be opened"
+                raise PackageError(msg)
+            raw = f.read()
+        out: dict[str, Any] = json.loads(raw.decode("utf-8"))
+    except gzip.BadGzipFile as exc:
+        msg = f"bundle is not a valid gzip file: {bundle_path}"
+        raise PackageError(msg) from exc
+    except tarfile.TarError as exc:
+        msg = f"bundle is not a valid tar archive: {bundle_path} ({exc})"
+        raise PackageError(msg) from exc
+    except UnicodeDecodeError as exc:
+        msg = f"bundle {member} is not valid utf-8: {exc}"
+        raise PackageError(msg) from exc
+    except json.JSONDecodeError as exc:
+        msg = f"bundle {member} is not valid JSON: {exc}"
+        raise PackageError(msg) from exc
+    except OSError as exc:
+        msg = f"could not read bundle {bundle_path}: {exc}"
+        raise PackageError(msg) from exc
+    return out
 
 
 def read_bundle_meta(bundle_path: Path) -> BundleMeta:
