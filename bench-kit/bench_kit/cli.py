@@ -19,12 +19,16 @@ from pathlib import Path
 
 from bench_kit import SPEC_VERSION, __version__
 from bench_kit.init import InitError, init_battle
+from bench_kit.package import PackageError, package_bundle
+from bench_kit.run import RunError, RunOptions, run_battle
 from bench_kit.validate import validate_battle
+from bench_kit.verify import VerifyError, verify_bundle
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1
 EXIT_USAGE = 2
 EXIT_NOT_IMPLEMENTED = 3
+EXIT_RUNTIME_FAILED = 4
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -51,9 +55,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     _add_init(sub)
     _add_validate(sub)
-    _add_stub(sub, "run", "execute a Battle's runners and produce result.json")
-    _add_stub(sub, "package", "bundle a result.json into a Claim artefact (claim.tar.gz)")
-    _add_stub(sub, "verify", "reproduce a Claim bundle and emit a verify-result.json")
+    _add_run(sub)
+    _add_package(sub)
+    _add_verify(sub)
     return parser
 
 
@@ -81,6 +85,69 @@ def _add_validate(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     p = sub.add_parser("validate", help="run static checks against a Battle directory")
     p.add_argument("battle_dir", type=Path, help="path to battles/<slug>/")
     p.set_defaults(_handler=_handle_validate)
+
+
+def _add_run(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser(
+        "run",
+        help="execute a Battle's runners and produce result.json",
+    )
+    p.add_argument("battle_dir", type=Path, help="path to battles/<slug>/")
+    p.add_argument(
+        "--tools",
+        type=str,
+        default=None,
+        help="comma-separated runner names to execute (default: all)",
+    )
+    p.add_argument(
+        "--results-dir",
+        type=Path,
+        default=None,
+        help="override results root (default: <battle_dir>/results)",
+    )
+    p.add_argument(
+        "--battle-repo",
+        type=str,
+        default=None,
+        help="canonical repo slug recorded in result.json (default: bench-kit's)",
+    )
+    p.set_defaults(_handler=_handle_run)
+
+
+def _add_package(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser(
+        "package",
+        help="bundle a result.json into a Claim artefact (claim.tar.gz)",
+    )
+    p.add_argument("result", type=Path, help="path to result.json")
+    p.add_argument(
+        "--output",
+        type=Path,
+        default=Path("claim.tar.gz"),
+        help="output bundle path (default: claim.tar.gz in cwd)",
+    )
+    p.set_defaults(_handler=_handle_package)
+
+
+def _add_verify(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser(
+        "verify",
+        help="reproduce a Claim bundle and emit a verify-result.json",
+    )
+    p.add_argument("bundle", type=Path, help="path to claim.tar.gz")
+    p.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        help="local checkout of battle_repo at exactly battle_commit",
+    )
+    p.add_argument(
+        "--output",
+        type=Path,
+        default=Path("verify-result.json"),
+        help="output verify-result.json path (default: ./verify-result.json)",
+    )
+    p.set_defaults(_handler=_handle_verify)
 
 
 def _add_stub(
@@ -121,6 +188,52 @@ def _handle_validate(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return EXIT_VALIDATION_FAILED
+
+
+def _handle_run(args: argparse.Namespace) -> int:
+    tools_arg = args.tools
+    tools: tuple[str, ...] | None = (
+        tuple(t.strip() for t in tools_arg.split(",") if t.strip()) if tools_arg else None
+    )
+    # Let ``RunOptions`` own the battle_repo default so it stays single-source.
+    base = RunOptions()
+    options = RunOptions(
+        tools=tools,
+        results_dir=args.results_dir,
+        battle_repo=args.battle_repo if args.battle_repo else base.battle_repo,
+    )
+    try:
+        out = run_battle(args.battle_dir, options)
+    except RunError as exc:
+        print(f"bench run: {exc}", file=sys.stderr)
+        return EXIT_RUNTIME_FAILED
+    print(f"wrote {out}")
+    return EXIT_OK
+
+
+def _handle_package(args: argparse.Namespace) -> int:
+    try:
+        out = package_bundle(args.result, args.output)
+    except PackageError as exc:
+        print(f"bench package: {exc}", file=sys.stderr)
+        return EXIT_RUNTIME_FAILED
+    print(f"wrote {out}")
+    return EXIT_OK
+
+
+def _handle_verify(args: argparse.Namespace) -> int:
+    try:
+        report = verify_bundle(
+            args.bundle,
+            source_dir=args.source,
+            output_path=args.output,
+        )
+    except VerifyError as exc:
+        print(f"bench verify: {exc}", file=sys.stderr)
+        return EXIT_RUNTIME_FAILED
+    print(f"verdict: {report.verdict}")
+    print(f"wrote {args.output}")
+    return EXIT_OK if report.verdict == "match" else EXIT_VALIDATION_FAILED
 
 
 def _handle_stub(args: argparse.Namespace) -> int:

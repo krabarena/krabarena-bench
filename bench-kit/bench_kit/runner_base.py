@@ -76,7 +76,14 @@ class RunResult:
     success: bool
     metrics: RunMetrics
     logs_path: Path
-    """Path to a JSONL log file (relative to the battle results root)."""
+    """Absolute path to the **directory** that holds this iteration's logs.
+
+    The orchestrator translates it to the schema-required relative
+    form (``runs/<tool>/<task>/<iteration>``) when assembling
+    ``result.json``. Runners using :func:`bench_kit.exec.run_task_in_sandbox`
+    get the canonical layout for free; bespoke runners should write
+    files into ``task.results_dir`` and return that path.
+    """
 
 
 class Runner(ABC):

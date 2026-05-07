@@ -19,7 +19,7 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from bench_kit import __version__ as _BENCH_KIT_VERSION
-from bench_kit.lint import _IMAGE_DIGEST_RE, LintIssue, lint_runners_dir
+from bench_kit.lint import IMAGE_DIGEST_RE, LintIssue, lint_runners_dir
 from bench_kit.schemas import load_schema
 
 
@@ -394,7 +394,7 @@ def _check_compose_service(
         )
     if has_image:
         image = cfg["image"]
-        if not (isinstance(image, str) and _IMAGE_DIGEST_RE.match(image)):
+        if not (isinstance(image, str) and IMAGE_DIGEST_RE.match(image)):
             issues.append(
                 LintIssue(
                     path=compose_path,
