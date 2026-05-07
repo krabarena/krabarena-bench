@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 
 from bench_kit import __version__ as _BENCH_KIT_VERSION
 from bench_kit.schemas import load_schema
@@ -74,7 +75,12 @@ def package_bundle(result_path: Path, output_path: Path) -> Path:
         msg = f"result file is not valid JSON: {exc}"
         raise PackageError(msg) from exc
 
-    Draft202012Validator(load_schema("result")).validate(result)
+    try:
+        Draft202012Validator(load_schema("result")).validate(result)
+    except ValidationError as exc:
+        loc = "/".join(str(p) for p in exc.absolute_path) or "<root>"
+        msg = f"result.json does not conform to the schema at {loc}: {exc.message}"
+        raise PackageError(msg) from exc
 
     if result["battle_commit"] == _NIL_COMMIT:
         msg = (

@@ -112,6 +112,16 @@ def test_package_rejects_missing_result(tmp_path: Path) -> None:
         package_bundle(tmp_path / "missing.json", tmp_path / "claim.tar.gz")
 
 
+def test_package_rejects_schema_invalid_result(tmp_path: Path) -> None:
+    result = tmp_path / "result.json"
+    _write_minimal_result(result)
+    data = json.loads(result.read_text(encoding="utf-8"))
+    del data["env"]  # required by result.schema.json
+    result.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(PackageError, match="does not conform to the schema"):
+        package_bundle(result, tmp_path / "claim.tar.gz")
+
+
 def test_package_rejects_non_json(tmp_path: Path) -> None:
     bad = tmp_path / "result.json"
     bad.write_text("not json", encoding="utf-8")
