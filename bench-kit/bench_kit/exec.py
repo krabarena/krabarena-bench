@@ -39,7 +39,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from bench_kit.lint import _IMAGE_DIGEST_RE
+from bench_kit.lint import IMAGE_DIGEST_RE
 from bench_kit.runner_base import RunMetrics, RunResult, Task
 
 _DOCKER = "docker"
@@ -123,7 +123,7 @@ def run_constrained(
     fixture networks; ``bench validate`` blocks anything else at
     static-check time.
     """
-    if not _IMAGE_DIGEST_RE.match(image):
+    if not IMAGE_DIGEST_RE.match(image):
         msg = (
             f"image {image!r} is not sha256-pinned; refusing to launch. "
             f"Use `<repo>@sha256:<64-hex>`."
@@ -236,13 +236,39 @@ def _format_mount(m: Mount) -> str:
 # ---------------------------------------------------------------------------
 
 
+_TIMEOUT_CREATE_S = 30.0
+_TIMEOUT_KILL_S = 10.0
+_TIMEOUT_RM_S = 10.0
+_TIMEOUT_STATS_S = 3.0
+
+
+def _docker(args: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+    """Single shape for every ``docker <subcommand>`` invocation in this module.
+
+    Centralising the four call sites avoids drift between them and makes
+    the timeout discipline visible at the top of the file.
+    """
+    return subprocess.run(
+        [_DOCKER, *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
 def _docker_create(argv: list[str]) -> str:
-    """Run ``docker create`` and return the resulting container id."""
+    """Run ``docker create`` and return the resulting container id.
+
+    ``argv`` already includes ``docker create`` because it is built
+    by :func:`_build_create_argv`; we shell out directly rather than
+    through :func:`_docker` to preserve that.
+    """
     proc = subprocess.run(
         argv,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=_TIMEOUT_CREATE_S,
         check=False,
     )
     if proc.returncode != 0:
@@ -256,21 +282,11 @@ def _docker_create(argv: list[str]) -> str:
 
 
 def _docker_kill(cid: str) -> None:
-    subprocess.run(
-        [_DOCKER, "kill", cid],
-        capture_output=True,
-        timeout=10,
-        check=False,
-    )
+    _docker(["kill", cid], timeout=_TIMEOUT_KILL_S)
 
 
 def _docker_rm(cid: str) -> None:
-    subprocess.run(
-        [_DOCKER, "rm", "-f", cid],
-        capture_output=True,
-        timeout=10,
-        check=False,
-    )
+    _docker(["rm", "-f", cid], timeout=_TIMEOUT_RM_S)
 
 
 # ---------------------------------------------------------------------------
@@ -286,19 +302,9 @@ def _poll_stats(
     """Poll ``docker stats --no-stream`` until ``stop`` is set."""
     while not stop.is_set():
         try:
-            proc = subprocess.run(
-                [
-                    _DOCKER,
-                    "stats",
-                    "--no-stream",
-                    "--format",
-                    "{{json .}}",
-                    cid,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=3,
-                check=False,
+            proc = _docker(
+                ["stats", "--no-stream", "--format", "{{json .}}", cid],
+                timeout=_TIMEOUT_STATS_S,
             )
         except subprocess.TimeoutExpired:
             stop.wait(_STATS_POLL_INTERVAL_S)

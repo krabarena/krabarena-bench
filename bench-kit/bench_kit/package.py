@@ -18,7 +18,7 @@ import gzip
 import io
 import json
 import tarfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -53,15 +53,7 @@ class BundleMeta:
     schema_version: str
 
     def to_dict(self) -> dict[str, str]:
-        return {
-            "bundle_version": self.bundle_version,
-            "battle_id": self.battle_id,
-            "battle_repo": self.battle_repo,
-            "battle_commit": self.battle_commit,
-            "bench_kit_version": self.bench_kit_version,
-            "ran_at": self.ran_at,
-            "schema_version": self.schema_version,
-        }
+        return asdict(self)
 
 
 def package_bundle(result_path: Path, output_path: Path) -> Path:
@@ -151,22 +143,34 @@ def _add_runs_tree(tar: tarfile.TarFile, runs_root: Path) -> None:
         tar.addfile(info, io.BytesIO(data))
 
 
-def read_bundle_meta(bundle_path: Path) -> BundleMeta:
-    """Read ``meta.json`` out of an existing bundle without unpacking."""
+def read_bundle_json(bundle_path: Path, member: str) -> dict[str, Any]:
+    """Extract ``member`` out of ``bundle_path`` and parse it as JSON.
+
+    Used by both :func:`read_bundle_meta` and :mod:`bench_kit.verify` —
+    the latter pulls ``result.json`` from the same bundle. Centralising
+    keeps the gzip+tar+JSON-decode boilerplate (and its error paths) in
+    one place.
+    """
     if not bundle_path.is_file():
         msg = f"bundle does not exist: {bundle_path}"
         raise PackageError(msg)
     with gzip.open(bundle_path, "rb") as gz, tarfile.open(fileobj=gz, mode="r") as tar:
         try:
-            entry = tar.getmember("meta.json")
+            entry = tar.getmember(member)
         except KeyError as exc:
-            msg = f"bundle missing meta.json: {bundle_path}"
+            msg = f"bundle missing {member}: {bundle_path}"
             raise PackageError(msg) from exc
         f = tar.extractfile(entry)
         if f is None:
-            msg = "bundle meta.json could not be opened"
+            msg = f"bundle {member} could not be opened"
             raise PackageError(msg)
-        data: dict[str, Any] = json.loads(f.read().decode("utf-8"))
+        out: dict[str, Any] = json.loads(f.read().decode("utf-8"))
+        return out
+
+
+def read_bundle_meta(bundle_path: Path) -> BundleMeta:
+    """Read ``meta.json`` out of an existing bundle without unpacking."""
+    data = read_bundle_json(bundle_path, "meta.json")
     required = (
         "bundle_version",
         "battle_id",
@@ -191,4 +195,10 @@ def read_bundle_meta(bundle_path: Path) -> BundleMeta:
     )
 
 
-__all__ = ["BundleMeta", "PackageError", "package_bundle", "read_bundle_meta"]
+__all__ = [
+    "BundleMeta",
+    "PackageError",
+    "package_bundle",
+    "read_bundle_json",
+    "read_bundle_meta",
+]

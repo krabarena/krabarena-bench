@@ -59,7 +59,7 @@ _FORBIDDEN_BUILTINS: frozenset[str] = frozenset({"eval", "exec", "compile", "__i
 
 # Acceptable image reference: ``<repo>[/<repo>...]@sha256:<64 hex>``.
 # Re-used by ``validate`` for compose service images.
-_IMAGE_DIGEST_RE = re.compile(
+IMAGE_DIGEST_RE = re.compile(
     r"^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$",
     flags=re.IGNORECASE,
 )
@@ -247,7 +247,7 @@ def _check_image_attr(tree: ast.AST, path: Path) -> list[LintIssue]:
                     )
                 )
                 continue
-            if not _IMAGE_DIGEST_RE.match(value.value):
+            if not IMAGE_DIGEST_RE.match(value.value):
                 issues.append(
                     LintIssue(
                         path=path,

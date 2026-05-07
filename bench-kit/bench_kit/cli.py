@@ -108,8 +108,8 @@ def _add_run(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.add_argument(
         "--battle-repo",
         type=str,
-        default="github.com/keenableai/krabarena-bench",
-        help="canonical repo slug recorded in result.json",
+        default=None,
+        help="canonical repo slug recorded in result.json (default: bench-kit's)",
     )
     p.set_defaults(_handler=_handle_run)
 
@@ -195,10 +195,12 @@ def _handle_run(args: argparse.Namespace) -> int:
     tools: tuple[str, ...] | None = (
         tuple(t.strip() for t in tools_arg.split(",") if t.strip()) if tools_arg else None
     )
+    # Let ``RunOptions`` own the battle_repo default so it stays single-source.
+    base = RunOptions()
     options = RunOptions(
         tools=tools,
         results_dir=args.results_dir,
-        battle_repo=args.battle_repo,
+        battle_repo=args.battle_repo if args.battle_repo else base.battle_repo,
     )
     try:
         out = run_battle(args.battle_dir, options)

@@ -33,22 +33,22 @@ Tolerance contract (SPEC §7)
 
 from __future__ import annotations
 
-import gzip
 import json
-import tarfile
-from dataclasses import dataclass, field
+import subprocess
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
 from bench_kit import SPEC_VERSION
-from bench_kit.package import BundleMeta, PackageError, read_bundle_meta
+from bench_kit.package import BundleMeta, PackageError, read_bundle_json, read_bundle_meta
 from bench_kit.run import RunOptions, run_battle
 
-VERDICT_MATCH = "match"
-VERDICT_MISMATCH = "mismatch"
-VERDICT_INCOMPLETE = "incomplete"
+Verdict = Literal["match", "mismatch", "incomplete"]
+VERDICT_MATCH: Verdict = "match"
+VERDICT_MISMATCH: Verdict = "mismatch"
+VERDICT_INCOMPLETE: Verdict = "incomplete"
 
 
 class VerifyError(Exception):
@@ -69,16 +69,7 @@ class MetricDiff:
     within_tolerance: bool
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "tool": self.tool,
-            "task": self.task,
-            "metric": self.metric,
-            "claimed": self.claimed,
-            "verified": self.verified,
-            "rel_diff": self.rel_diff,
-            "tolerance": self.tolerance,
-            "within_tolerance": self.within_tolerance,
-        }
+        return asdict(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +79,7 @@ class VerifyReport:
     ``verdict`` is one of ``match``, ``mismatch``, ``incomplete``.
     """
 
-    verdict: str
+    verdict: Verdict
     bundle_meta: BundleMeta
     diffs: list[MetricDiff] = field(default_factory=list)
 
@@ -97,7 +88,7 @@ class VerifyReport:
             "schema_version": SPEC_VERSION,
             "verdict": self.verdict,
             "bundle_meta": self.bundle_meta.to_dict(),
-            "diffs": [d.to_dict() for d in self.diffs],
+            "diffs": [asdict(d) for d in self.diffs],
         }
 
 
@@ -160,18 +151,11 @@ def verify_bundle(
 
 
 def _extract_result_json(bundle_path: Path) -> dict[str, Any]:
-    with gzip.open(bundle_path, "rb") as gz, tarfile.open(fileobj=gz, mode="r") as tar:
-        try:
-            entry = tar.getmember("result.json")
-        except KeyError as exc:
-            msg = "bundle is missing result.json"
-            raise VerifyError(msg) from exc
-        f = tar.extractfile(entry)
-        if f is None:
-            msg = "bundle result.json could not be opened"
-            raise VerifyError(msg)
-        out: dict[str, Any] = json.loads(f.read().decode("utf-8"))
-        return out
+    try:
+        return read_bundle_json(bundle_path, "result.json")
+    except PackageError as exc:
+        msg = f"bundle is missing or corrupt result.json: {exc}"
+        raise VerifyError(msg) from exc
 
 
 def _locate_battle(source_dir: Path, battle_id: str) -> Path:
@@ -197,8 +181,6 @@ def _locate_battle(source_dir: Path, battle_id: str) -> Path:
 
 
 def _commit_matches(source_dir: Path, expected: str) -> bool:
-    import subprocess  # noqa: PLC0415 — keep at use-site so import-cost stays out of common path
-
     proc = subprocess.run(
         ["git", "-C", str(source_dir), "rev-parse", "HEAD"],
         capture_output=True,
@@ -230,21 +212,7 @@ def _compare_summaries(
         v_metrics = verified_by_key.get((tool, task))
         for metric, claimed_value in row["metrics"].items():
             tol = tolerances.get(metric, 0.0)
-            if v_metrics is None:
-                diffs.append(
-                    MetricDiff(
-                        tool=tool,
-                        task=task,
-                        metric=metric,
-                        claimed=claimed_value,
-                        verified=None,
-                        rel_diff=None,
-                        tolerance=tol,
-                        within_tolerance=False,
-                    )
-                )
-                continue
-            verified_value = v_metrics.get(metric)
+            verified_value = v_metrics.get(metric) if v_metrics is not None else None
             diffs.append(_one_diff(tool, task, metric, claimed_value, verified_value, tol))
     return diffs
 
@@ -296,10 +264,8 @@ def _one_diff(
     )
 
 
-def _verdict_from_diffs(diffs: list[MetricDiff]) -> str:
-    if not diffs:
-        return VERDICT_INCOMPLETE
-    if any(d.verified is None for d in diffs):
+def _verdict_from_diffs(diffs: list[MetricDiff]) -> Verdict:
+    if not diffs or any(d.verified is None for d in diffs):
         return VERDICT_INCOMPLETE
     if all(d.within_tolerance for d in diffs):
         return VERDICT_MATCH
