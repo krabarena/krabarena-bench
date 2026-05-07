@@ -1,0 +1,21 @@
+schema_version: "0.1.0"
+id: form-fill
+title: "Form fill + submit + redirect"
+description: |
+  Open `http://app/form`, fill a username + password form, submit, wait
+  for the redirect to `/form/ok`, return the rendered page's `<h1>`
+  text. Tests interaction with a real submit handler and post-redirect
+  state.
+fixture_service: app
+inputs:
+  url: "http://app/form"
+  username: "krab"
+  password: "arena"
+expected:
+  heading: "Welcome krab"
+success_predicate: "output.heading == expected.heading"
+timeout_s: 30
+iterations: 5
+limits:
+  memory_mb: 1024
+  cpus: 1.5

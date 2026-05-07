@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>krabarena fixture / router</title>
+</head>
+<body>
+  <nav>
+    <a id="link-home" href="#/home">home</a>
+    <a id="link-about" href="#/about">about</a>
+  </nav>
+  <main id="view"></main>
+  <script>
+    const VIEWS = {
+      "#/home": "<h1>Home krabarena</h1>",
+      "#/about": "<h1>About krabarena</h1>",
+    };
+    function render() {
+      const hash = window.location.hash || "#/home";
+      document.getElementById("view").innerHTML = VIEWS[hash] || "<h1>404</h1>";
+      document.body.dataset.route = hash;
+    }
+    window.addEventListener("hashchange", render);
+    render();
+  </script>
+</body>
+</html>

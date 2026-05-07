@@ -1,0 +1,38 @@
+# Local fixtures for the browsers Battle.
+# Egress-blocked: every service sits on the `bench` internal network.
+
+services:
+  browserless:
+    image: ghcr.io/browserless/chromium@sha256:78afaada9f7b049783bfed624e6b5e9a2d3438fc04bb46801ed777e82ae1501f
+    networks: [bench]
+    environment:
+      TOKEN: krabarena
+      CONCURRENT: "16"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O - http://localhost:3000/json/version || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  lightpanda:
+    image: lightpanda/browser@sha256:0283ba962dffe2f7b46a29377276837b033b1174b92b5a30da641a1b1561ef5c
+    networks: [bench]
+    command: ["serve", "--host", "0.0.0.0", "--port", "9222"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O - http://localhost:9222/json/version || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: ./app
+    networks: [bench]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O - http://localhost/healthz || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+networks:
+  bench:
+    internal: true

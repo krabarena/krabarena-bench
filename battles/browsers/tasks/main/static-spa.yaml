@@ -1,0 +1,23 @@
+schema_version: "0.1.0"
+id: static-spa
+title: "Static SPA dump"
+description: |
+  Open the React-shaped fixture page at `http://app/static`, wait for
+  the network to go idle, return the rendered DOM's title text and
+  the count of `<li>` elements in the main list.
+
+  This is Lightpanda's natural turf: a fully client-rendered list
+  with no canvas, video, or external-network needs.
+fixture_service: app
+inputs:
+  url: "http://app/static"
+  expected_items: 50
+expected:
+  title: "krabarena fixture / static"
+  items: 50
+success_predicate: "output.title == expected.title and output.items == expected.items"
+timeout_s: 30
+iterations: 5
+limits:
+  memory_mb: 1024
+  cpus: 1.5

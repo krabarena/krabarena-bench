@@ -1,0 +1,9 @@
+{
+  "name": "krabarena-browsers-fixture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "express": "4.21.2"
+  }
+}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>krabarena fixture / feed</title>
+</head>
+<body>
+  <h1>Feed</h1>
+  <ul id="items"></ul>
+  <button id="more">load more</button>
+  <script>
+    const ul = document.getElementById("items");
+    let offset = 0;
+    const limit = 20;
+    let loading = false;
+
+    async function loadMore() {
+      if (loading) return;
+      loading = true;
+      const r = await fetch(`/feed/items?offset=${offset}&limit=${limit}`);
+      const data = await r.json();
+      for (const item of data.items) {
+        const li = document.createElement("li");
+        li.textContent = item.text;
+        li.dataset.id = String(item.id);
+        ul.appendChild(li);
+      }
+      offset += data.items.length;
+      loading = false;
+      document.body.dataset.lastBatch = String(data.items.length);
+    }
+
+    document.getElementById("more").addEventListener("click", loadMore);
+    // Auto-load on hitting the bottom too — exercises scroll-triggered fetch.
+    window.addEventListener("scroll", () => {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 100) {
+        loadMore();
+      }
+    });
+    loadMore();
+  </script>
+</body>
+</html>
