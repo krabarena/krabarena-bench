@@ -14,6 +14,12 @@ fixture_service: app
 inputs:
   url: "http://app/canvas"
 expected:
+  # Once a verified Browserless run produces a known-good canvas
+  # hash, pin it here as `canvas_hash: "<sha256>"` and tighten the
+  # predicate to equality. Until then the predicate only asserts
+  # the shape, which Lightpanda might satisfy with a blank canvas
+  # — acceptable as a placeholder while the framework's
+  # success_predicate is still documentation-only.
   hash_present: true
 success_predicate: "isinstance(output.canvas_hash, str) and len(output.canvas_hash) == 64"
 timeout_s: 30

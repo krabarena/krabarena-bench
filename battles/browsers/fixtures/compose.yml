@@ -13,6 +13,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 15s  # Browserless boots a real Chromium; spare the noise during boot.
 
   lightpanda:
     image: lightpanda/browser@sha256:0283ba962dffe2f7b46a29377276837b033b1174b92b5a30da641a1b1561ef5c
@@ -23,6 +24,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 5s
 
   app:
     build: ./app

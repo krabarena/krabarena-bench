@@ -56,3 +56,17 @@ bench package battles/browsers/results/result.json --output claim.tar.gz
 
 See [`../../docs/AUTHORING_BATTLES.md`](../../docs/AUTHORING_BATTLES.md)
 for the full Battle workflow and contract.
+
+## Caveats
+
+- **`success_predicate` is documentation today, not enforcement.** The
+  bench-kit `run_battle` orchestrator records `success` from the
+  runner's `RunResult`, not from evaluating the YAML's predicate
+  against `output.json`. The predicates here describe the editorial
+  contract; the runners encode the actual success condition in their
+  Playwright driver. Predicate evaluation is on the bench-kit
+  follow-up roadmap.
+- **`canvas-render` predicate currently checks shape, not value.**
+  Once a Browserless full-Chromium run produces a known-good canvas
+  hash, the golden value will be pinned in `expected.canvas_hash`
+  and the predicate tightened.

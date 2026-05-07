@@ -16,8 +16,7 @@ runners_dir: "runners"
 fixtures:
   compose: "fixtures/compose.yml"
 metrics:
-  optional:
-    - requests_made
+  optional: []
 tolerances:
   success_rate: 0.0
   wall_clock_ms_p50: 0.20
