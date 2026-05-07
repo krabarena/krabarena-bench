@@ -102,7 +102,7 @@ _RUNNER_TEMPLATE = '''\
 
 from __future__ import annotations
 
-from bench_kit.exec import run_constrained
+from bench_kit.exec import run_task_in_sandbox
 from bench_kit.runner_base import Runner, RunResult, Task
 
 
@@ -112,12 +112,10 @@ class ExampleRunner(Runner):
     image = "library/hello-world@sha256:{digest}"
 
     def run(self, task: Task) -> RunResult:
-        return run_constrained(
+        return run_task_in_sandbox(
+            task,
             image=self.image,
             args=["echo", task.id],
-            network=task.fixture_network,
-            mounts={{"task": task.dir, "results": task.results_dir}},
-            limits=task.limits,
         )
 '''
 

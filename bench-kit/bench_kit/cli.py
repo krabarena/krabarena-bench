@@ -19,12 +19,14 @@ from pathlib import Path
 
 from bench_kit import SPEC_VERSION, __version__
 from bench_kit.init import InitError, init_battle
+from bench_kit.run import RunError, RunOptions, run_battle
 from bench_kit.validate import validate_battle
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1
 EXIT_USAGE = 2
 EXIT_NOT_IMPLEMENTED = 3
+EXIT_RUNTIME_FAILED = 4
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -51,7 +53,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     _add_init(sub)
     _add_validate(sub)
-    _add_stub(sub, "run", "execute a Battle's runners and produce result.json")
+    _add_run(sub)
     _add_stub(sub, "package", "bundle a result.json into a Claim artefact (claim.tar.gz)")
     _add_stub(sub, "verify", "reproduce a Claim bundle and emit a verify-result.json")
     return parser
@@ -81,6 +83,33 @@ def _add_validate(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     p = sub.add_parser("validate", help="run static checks against a Battle directory")
     p.add_argument("battle_dir", type=Path, help="path to battles/<slug>/")
     p.set_defaults(_handler=_handle_validate)
+
+
+def _add_run(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser(
+        "run",
+        help="execute a Battle's runners and produce result.json",
+    )
+    p.add_argument("battle_dir", type=Path, help="path to battles/<slug>/")
+    p.add_argument(
+        "--tools",
+        type=str,
+        default=None,
+        help="comma-separated runner names to execute (default: all)",
+    )
+    p.add_argument(
+        "--results-dir",
+        type=Path,
+        default=None,
+        help="override results root (default: <battle_dir>/results)",
+    )
+    p.add_argument(
+        "--battle-repo",
+        type=str,
+        default="github.com/keenableai/krabarena-bench",
+        help="canonical repo slug recorded in result.json",
+    )
+    p.set_defaults(_handler=_handle_run)
 
 
 def _add_stub(
@@ -121,6 +150,25 @@ def _handle_validate(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return EXIT_VALIDATION_FAILED
+
+
+def _handle_run(args: argparse.Namespace) -> int:
+    tools_arg = args.tools
+    tools: tuple[str, ...] | None = (
+        tuple(t.strip() for t in tools_arg.split(",") if t.strip()) if tools_arg else None
+    )
+    options = RunOptions(
+        tools=tools,
+        results_dir=args.results_dir,
+        battle_repo=args.battle_repo,
+    )
+    try:
+        out = run_battle(args.battle_dir, options)
+    except RunError as exc:
+        print(f"bench run: {exc}", file=sys.stderr)
+        return EXIT_RUNTIME_FAILED
+    print(f"wrote {out}")
+    return EXIT_OK
 
 
 def _handle_stub(args: argparse.Namespace) -> int:

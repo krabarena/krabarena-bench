@@ -98,7 +98,7 @@ def test_validate_dirty_battle(tmp_path: Path) -> None:
     assert rc == EXIT_VALIDATION_FAILED
 
 
-@pytest.mark.parametrize("cmd", ["run", "package", "verify"])
+@pytest.mark.parametrize("cmd", ["package", "verify"])
 def test_unimplemented_subcommands_exit_with_code(cmd: str) -> None:
     rc = main([cmd])
     assert rc == EXIT_NOT_IMPLEMENTED

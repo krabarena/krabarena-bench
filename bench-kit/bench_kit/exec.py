@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bench_kit.lint import _IMAGE_DIGEST_RE
+from bench_kit.runner_base import RunMetrics, RunResult, Task
 
 _DOCKER = "docker"
 _STATS_POLL_INTERVAL_S = 0.2
@@ -362,10 +363,81 @@ def _parse_pct(s: str) -> float | None:
         return None
 
 
+def run_task_in_sandbox(
+    task: Task,
+    *,
+    image: str,
+    args: list[str],
+    extra_env: dict[str, str] | None = None,
+) -> RunResult:
+    """High-level helper: run ``image`` against ``task``, write the log,
+    and return a :class:`bench_kit.runner_base.RunResult`.
+
+    This is the recommended entrypoint for runners. It encapsulates the
+    full mounting / limits / log-write boilerplate so a real runner can
+    be ten lines:
+
+    .. code-block:: python
+
+        def run(self, task: Task) -> RunResult:
+            return run_task_in_sandbox(
+                task,
+                image=self.image,
+                args=["node", "/task/driver.js", task.id],
+            )
+
+    The log file is JSONL at ``<task.results_dir>/log.jsonl`` with one
+    record carrying exit code, timeout flag, stdout, stderr, and the
+    raw metric samples. The returned ``RunResult.logs_path`` is the
+    absolute path to that file; the orchestrator translates it to the
+    schema-required relative form when assembling ``result.json``.
+    """
+    result = run_constrained(
+        image=image,
+        args=args,
+        network=task.fixture_network,
+        mounts=[
+            Mount(host=task.dir, container="/task", readonly=True),
+            Mount(host=task.results_dir, container="/results"),
+        ],
+        limits=ExecLimits(
+            memory_mb=task.limits.memory_mb,
+            cpus=task.limits.cpus,
+            timeout_s=task.timeout_s,
+        ),
+        env=extra_env,
+    )
+
+    log_path = task.results_dir / "log.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "task_id": task.id,
+        "exit_code": result.exit_code,
+        "timed_out": result.timed_out,
+        "wall_clock_ms": result.wall_clock_ms,
+        "peak_rss_mb": result.peak_rss_mb,
+        "cpu_time_ms": result.cpu_time_ms,
+        "stdout": result.stdout.decode("utf-8", errors="replace"),
+        "stderr": result.stderr.decode("utf-8", errors="replace"),
+    }
+    log_path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    return RunResult(
+        success=result.success,
+        metrics=RunMetrics(
+            wall_clock_ms=result.wall_clock_ms,
+            peak_rss_mb=result.peak_rss_mb,
+            cpu_time_ms=result.cpu_time_ms,
+        ),
+        logs_path=log_path,
+    )
+
+
 __all__ = [
     "ExecError",
     "ExecLimits",
     "ExecResult",
     "Mount",
     "run_constrained",
+    "run_task_in_sandbox",
 ]
