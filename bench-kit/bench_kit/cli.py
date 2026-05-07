@@ -19,6 +19,7 @@ from pathlib import Path
 
 from bench_kit import SPEC_VERSION, __version__
 from bench_kit.init import InitError, init_battle
+from bench_kit.package import PackageError, package_bundle
 from bench_kit.run import RunError, RunOptions, run_battle
 from bench_kit.validate import validate_battle
 
@@ -54,7 +55,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_init(sub)
     _add_validate(sub)
     _add_run(sub)
-    _add_stub(sub, "package", "bundle a result.json into a Claim artefact (claim.tar.gz)")
+    _add_package(sub)
     _add_stub(sub, "verify", "reproduce a Claim bundle and emit a verify-result.json")
     return parser
 
@@ -112,6 +113,21 @@ def _add_run(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.set_defaults(_handler=_handle_run)
 
 
+def _add_package(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser(
+        "package",
+        help="bundle a result.json into a Claim artefact (claim.tar.gz)",
+    )
+    p.add_argument("result", type=Path, help="path to result.json")
+    p.add_argument(
+        "--output",
+        type=Path,
+        default=Path("claim.tar.gz"),
+        help="output bundle path (default: claim.tar.gz in cwd)",
+    )
+    p.set_defaults(_handler=_handle_package)
+
+
 def _add_stub(
     sub: argparse._SubParsersAction[argparse.ArgumentParser],
     name: str,
@@ -166,6 +182,16 @@ def _handle_run(args: argparse.Namespace) -> int:
         out = run_battle(args.battle_dir, options)
     except RunError as exc:
         print(f"bench run: {exc}", file=sys.stderr)
+        return EXIT_RUNTIME_FAILED
+    print(f"wrote {out}")
+    return EXIT_OK
+
+
+def _handle_package(args: argparse.Namespace) -> int:
+    try:
+        out = package_bundle(args.result, args.output)
+    except PackageError as exc:
+        print(f"bench package: {exc}", file=sys.stderr)
         return EXIT_RUNTIME_FAILED
     print(f"wrote {out}")
     return EXIT_OK
