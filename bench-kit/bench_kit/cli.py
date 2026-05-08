@@ -138,8 +138,20 @@ def _add_verify(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     p.add_argument(
         "--source",
         type=Path,
-        required=True,
-        help="local checkout of battle_repo at exactly battle_commit",
+        default=None,
+        help=(
+            "use an existing local checkout of battle_repo already at "
+            "battle_commit (skips auto-clone)"
+        ),
+    )
+    p.add_argument(
+        "--keep-source",
+        type=Path,
+        default=None,
+        help=(
+            "clone battle_repo into this directory (must be empty) and leave it "
+            "behind for inspection — useful when iterating on a refute"
+        ),
     )
     p.add_argument(
         "--output",
@@ -226,6 +238,7 @@ def _handle_verify(args: argparse.Namespace) -> int:
         report = verify_bundle(
             args.bundle,
             source_dir=args.source,
+            keep_source=args.keep_source,
             output_path=args.output,
         )
     except VerifyError as exc:

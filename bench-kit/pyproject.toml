@@ -131,4 +131,5 @@ addopts = [
 filterwarnings = ["error"]
 markers = [
     "docker: requires a running docker daemon (skipped on hosts without one)",
+    "network: requires outbound HTTPS to a real Git host (e.g. github.com)",
 ]

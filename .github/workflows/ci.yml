@@ -45,8 +45,34 @@ jobs:
       - name: mypy
         run: mypy bench_kit tests
 
-      - name: pytest (no docker)
-        run: pytest -m "not docker"
+      - name: pytest (no docker, no network)
+        run: pytest -m "not docker and not network"
+
+  bench-kit-network:
+    name: bench-kit (network integration)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: bench-kit
+    needs: bench-kit
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: bench-kit/pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: pytest (network only)
+        run: pytest -m network -v
 
   bench-kit-docker:
     name: bench-kit (docker integration)
