@@ -38,5 +38,7 @@ class LightpandaRunner(Runner):
                 "cdp",
                 "--inputs",
                 json.dumps(task.inputs),
+                "--expected",
+                json.dumps(task.expected),
             ],
         )

@@ -6,12 +6,16 @@
 //     --target <fixture-url> \
 //     --browser-endpoint <ws-or-http-url> \
 //     --connect-mode <playwright|cdp> \
-//     [--inputs <json-string>]
+//     [--inputs <json-string>] \
+//     [--expected <json-string>]
 //
 // Writes a JSON object to /results/output.json with task-specific
-// fields the orchestrator's success_predicate is evaluated against.
-// Exits 0 on success, 1 on any task-level failure (the wrapper still
-// records metrics + bundles the log).
+// fields. After the handler returns, every key in `expected` is
+// asserted against the corresponding key in `output`; any mismatch
+// makes the process exit 1 so `RunResult.success` reflects whether
+// the task actually produced the right answer (bench-kit's
+// `success_predicate` is parsed but not yet evaluated server-side,
+// so the harness enforces it locally — see README §Caveats).
 
 "use strict";
 
@@ -145,9 +149,27 @@ async function writeOutput(payload) {
   await fs.writeFile(outPath, JSON.stringify(payload) + "\n", "utf-8");
 }
 
+function findExpectedMismatch(output, expected) {
+  // Generic predicate-shaped check: for every key in `expected` that
+  // also exists in `output`, the values must be deep-equal. Keys in
+  // `expected` that are absent from `output` are treated as
+  // documentation-only placeholders (e.g. `hash_present: true` on
+  // canvas-render before the golden hash is pinned).
+  if (!expected || typeof expected !== "object") return null;
+  for (const [key, want] of Object.entries(expected)) {
+    if (!(key in output)) continue;
+    const got = output[key];
+    if (JSON.stringify(got) !== JSON.stringify(want)) {
+      return { key, expected: want, got };
+    }
+  }
+  return null;
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const inputs = args.inputs ? JSON.parse(args.inputs) : {};
+  const expected = args.expected ? JSON.parse(args.expected) : {};
   const handler = TASKS[args.task];
   if (!handler) {
     throw new Error(`unknown task: ${args.task}`);
@@ -157,6 +179,15 @@ async function main() {
     browser = await connect(args["browser-endpoint"], args["connect-mode"]);
     const output = await handler(browser, args.target, inputs);
     await writeOutput(output);
+    const mismatch = findExpectedMismatch(output, expected);
+    if (mismatch) {
+      console.error(
+        `task ${args.task}: expected.${mismatch.key}=${JSON.stringify(
+          mismatch.expected,
+        )} but got ${JSON.stringify(mismatch.got)}`,
+      );
+      process.exit(1);
+    }
   } catch (err) {
     // Always emit output.json with diagnostic context so the
     // orchestrator log carries the failure cause; exit non-zero

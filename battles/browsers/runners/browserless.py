@@ -41,5 +41,7 @@ class BrowserlessRunner(Runner):
                 "playwright",
                 "--inputs",
                 json.dumps(task.inputs),
+                "--expected",
+                json.dumps(task.expected),
             ],
         )
