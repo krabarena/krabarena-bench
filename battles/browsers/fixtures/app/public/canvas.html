@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>krabarena fixture / canvas</title>
+</head>
+<body>
+  <h1>Canvas</h1>
+  <canvas id="c" width="200" height="200"></canvas>
+  <script>
+    // Deterministic 10x10 grid of coloured cells; canvas.toDataURL() is
+    // expected to hash to a stable value across full Chromium runs.
+    const c = document.getElementById("c");
+    const ctx = c.getContext("2d");
+    for (let y = 0; y < 10; y++) {
+      for (let x = 0; x < 10; x++) {
+        const r = (x * 23) % 256;
+        const g = (y * 31) % 256;
+        const b = ((x + y) * 17) % 256;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x * 20, y * 20, 20, 20);
+      }
+    }
+    document.body.dataset.painted = "1";
+  </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+schema_version: "0.1.0"
+id: multi-tab
+title: "Multi-tab parallel @ concurrency=10"
+description: |
+  Open ten parallel browser contexts pointing at `http://app/static`,
+  collect each one's `<title>` and item count, return the totals.
+  Stress-tests throughput under concurrent CDP sessions.
+fixture_service: app
+inputs:
+  url: "http://app/static"
+  concurrency: 10
+  expected_items_per_tab: 50
+expected:
+  total_items: 500
+success_predicate: "output.total_items == expected.total_items"
+timeout_s: 60
+iterations: 3
+limits:
+  memory_mb: 4096
+  cpus: 4

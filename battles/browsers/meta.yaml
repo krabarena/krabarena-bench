@@ -1,0 +1,24 @@
+schema_version: "0.1.0"
+battle_id: "fcc1740b-5ff4-4336-8672-6943ce7f7c93"
+slug: "browsers"
+kind: "containerised"
+title: "Browserless vs Lightpanda for AI agents"
+tags:
+  - browser
+  - scraping
+  - perf
+  - ai-agents
+  - benchmark
+  - headless
+bench_kit_version: ">=0.1.0,<0.2.0"
+tasks_dir: "tasks/main"
+runners_dir: "runners"
+fixtures:
+  compose: "fixtures/compose.yml"
+metrics:
+  optional: []
+tolerances:
+  success_rate: 0.0
+  wall_clock_ms_p50: 0.20
+  wall_clock_ms_p95: 0.30
+  peak_rss_mb: 0.25

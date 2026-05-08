@@ -1,0 +1,19 @@
+schema_version: "0.1.0"
+id: client-router
+title: "Client-side router transition"
+description: |
+  Open `http://app/router#/home`, click a link that triggers a
+  `hashchange`-routed navigation to `#/about`, wait for the route to
+  hydrate, return the rendered `<h1>` text. Tests SPA routing without
+  a server round-trip.
+fixture_service: app
+inputs:
+  url: "http://app/router#/home"
+expected:
+  heading: "About krabarena"
+success_predicate: "output.heading == expected.heading"
+timeout_s: 30
+iterations: 5
+limits:
+  memory_mb: 1024
+  cpus: 1.5

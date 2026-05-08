@@ -1,0 +1,20 @@
+schema_version: "0.1.0"
+id: xhr-driven
+title: "XHR-driven content"
+description: |
+  Open `http://app/xhr`, click the "load" button, wait for the JSON
+  response to populate `<ul id="items">` via fetch(), return the
+  rendered count. Tests the runtime's network-stack + DOM-mutation
+  observability after a user-triggered request.
+fixture_service: app
+inputs:
+  url: "http://app/xhr"
+  expected_items: 25
+expected:
+  count: 25
+success_predicate: "output.count == expected.count"
+timeout_s: 30
+iterations: 5
+limits:
+  memory_mb: 1024
+  cpus: 1.5
