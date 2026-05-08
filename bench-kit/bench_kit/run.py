@@ -304,11 +304,15 @@ def _execute_task(
     runs_out: list[dict[str, Any]],
 ) -> None:
     iterations = int(task_data["iterations"])
+    expected = dict(task_data.get("expected") or {})
     for iteration in range(iterations):
         iter_results = results_dir / "runs" / tool_name / task_id / str(iteration)
         iter_results.mkdir(parents=True, exist_ok=True)
         task = _build_task(task_data, battle_dir, iter_results, fixture_network)
         run_res = runner.run(task)
+        success = _final_success(
+            run_res.success, iter_results, expected, tool_name, task_id, iteration
+        )
         rel = iter_results.relative_to(results_dir).as_posix()
         runs_out.append(
             {
@@ -321,10 +325,117 @@ def _execute_task(
                     "cpu_time_ms": run_res.metrics.cpu_time_ms,
                     **dict(run_res.metrics.extra),
                 },
-                "success": run_res.success,
+                "success": success,
                 "logs_path": rel,
             }
         )
+
+
+class _OutputJsonError(Exception):
+    """Raised when ``output.json`` exists but cannot be parsed as a JSON object.
+
+    Distinguished from the "file absent" path (which returns ``None``
+    from :func:`_read_output_json`): a runner that wrote a malformed
+    ``output.json`` is buggy, not legacy, and silently falling back
+    to its exit-code success would mask the bug. See SPEC §3.4.
+    """
+
+
+def _final_success(
+    runner_success: bool,
+    iter_results: Path,
+    expected: dict[str, Any],
+    tool: str,
+    task_id: str,
+    iteration: int,
+) -> bool:
+    """Combine the runner's exit-code success with output-vs-expected check.
+
+    The runner's container exit code is the first signal. If that's
+    already false we keep it false. If true, we look for
+    ``<iter_results>/output.json`` and assert every key in
+    ``expected`` deep-equals the corresponding key in ``output``.
+    Missing keys in output (placeholders like ``hash_present: true``
+    waiting on a golden value) are skipped — see SPEC §3.4.
+
+    A runner that doesn't write ``output.json`` at all keeps
+    ``runner_success`` as the source of truth, so old battles and
+    runners that pre-date the structured-output convention continue
+    to work. A runner that writes a *malformed* ``output.json`` is
+    a different case — the run fails with a diagnostic, because that
+    is a runner bug we want to surface, not back-compat with a missing
+    feature.
+    """
+    if not runner_success or not expected:
+        return runner_success
+    try:
+        output = _read_output_json(iter_results)
+    except _OutputJsonError as exc:
+        print(
+            f"task {task_id} iter {iteration}/{tool}: malformed output.json: {exc}",
+            file=sys.stderr,
+        )
+        return False
+    if output is None:
+        return runner_success
+    ok, mismatch = _matches_expected(output, expected)
+    if not ok:
+        print(
+            f"task {task_id} iter {iteration}/{tool}: {mismatch}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _read_output_json(iter_results: Path) -> dict[str, Any] | None:
+    """Parse ``<iter_results>/output.json``.
+
+    Returns ``None`` only when the file does not exist (legacy
+    runners). Raises :class:`_OutputJsonError` if the file is present
+    but unreadable, isn't valid JSON, or doesn't decode to a JSON
+    object — those are runner bugs that should fail the run loudly,
+    not be silently absorbed into the exit-code path.
+    """
+    path = iter_results / "output.json"
+    if not path.is_file():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        msg = f"could not read {path.name}: {exc}"
+        raise _OutputJsonError(msg) from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        msg = f"{path.name} is not valid JSON: {exc}"
+        raise _OutputJsonError(msg) from exc
+    if not isinstance(data, dict):
+        msg = f"{path.name} root must be an object, got {type(data).__name__}"
+        raise _OutputJsonError(msg)
+    return data
+
+
+def _matches_expected(
+    output: dict[str, Any],
+    expected: dict[str, Any],
+) -> tuple[bool, str | None]:
+    """Deep-equal every key in ``expected`` against ``output``.
+
+    Keys present in ``expected`` but absent from ``output`` are
+    skipped — that's the placeholder convention for values pinned
+    later (e.g. ``hash_present: true`` on a canvas hash before a
+    verified Browserless run produces the golden). Returns
+    ``(ok, mismatch_message)`` so the caller can surface a clear
+    diagnostic when ``ok`` is false.
+    """
+    for key, want in expected.items():
+        if key not in output:
+            continue
+        got = output[key]
+        if got != want:
+            return False, f"expected.{key}={want!r} but output.{key}={got!r}"
+    return True, None
 
 
 def _build_task(

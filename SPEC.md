@@ -131,13 +131,31 @@ to pass `bench validate`.
 
 ### 3.4 Success semantics
 
-`success: true` means the Task's `success_predicate` (declared in
-the task YAML) matched the Run's structured output. `success: false`
-means it did not — for any reason: the tool errored, the predicate
-returned false, the timeout fired. **There is no partial success and
-no implicit retry.** Tools that need retries to function must
-implement them inside their runner and account for the time in
-`wall_clock_ms`; the framework does not retry.
+`success: true` requires both:
+
+1. The runner's container exited with code 0 (not OOM-killed, not
+   timed out, not crashed).
+2. **If** the runner wrote `<task.results_dir>/output.json`,
+   every key declared in the Task's `expected:` block deep-equals
+   the corresponding key in `output`. Keys present in `expected`
+   but absent from `output` are skipped (the placeholder convention
+   for values pinned later, e.g. a golden hash before the first
+   verified run).
+
+`success: false` means one of those failed — for any reason: the
+tool errored, the timeout fired, the runner produced a wrong
+`output.json`. **There is no partial success and no implicit retry.**
+Tools that need retries to function must implement them inside their
+runner and account for the time in `wall_clock_ms`; the framework
+does not retry.
+
+The `success_predicate` field in `tasks/*.yaml` is **documentation
+today, not enforcement** — it states the editorial contract in human
+form. The actual gate is `expected`-vs-`output` deep equality
+above. A future spec rev may promote `success_predicate` to a
+sandboxed evaluator; for now, keep it as a faithful description of
+what `expected` enforces, so a reader of the YAML can understand
+what success means without reading runner code.
 
 ---
 
