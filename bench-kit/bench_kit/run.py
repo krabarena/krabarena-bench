@@ -331,6 +331,16 @@ def _execute_task(
         )
 
 
+class _OutputJsonError(Exception):
+    """Raised when ``output.json`` exists but cannot be parsed as a JSON object.
+
+    Distinguished from the "file absent" path (which returns ``None``
+    from :func:`_read_output_json`): a runner that wrote a malformed
+    ``output.json`` is buggy, not legacy, and silently falling back
+    to its exit-code success would mask the bug. See SPEC §3.4.
+    """
+
+
 def _final_success(
     runner_success: bool,
     iter_results: Path,
@@ -351,11 +361,21 @@ def _final_success(
     A runner that doesn't write ``output.json`` at all keeps
     ``runner_success`` as the source of truth, so old battles and
     runners that pre-date the structured-output convention continue
-    to work.
+    to work. A runner that writes a *malformed* ``output.json`` is
+    a different case — the run fails with a diagnostic, because that
+    is a runner bug we want to surface, not back-compat with a missing
+    feature.
     """
     if not runner_success or not expected:
         return runner_success
-    output = _read_output_json(iter_results)
+    try:
+        output = _read_output_json(iter_results)
+    except _OutputJsonError as exc:
+        print(
+            f"task {task_id} iter {iteration}/{tool}: malformed output.json: {exc}",
+            file=sys.stderr,
+        )
+        return False
     if output is None:
         return runner_success
     ok, mismatch = _matches_expected(output, expected)
@@ -369,21 +389,31 @@ def _final_success(
 
 
 def _read_output_json(iter_results: Path) -> dict[str, Any] | None:
-    """Return parsed ``output.json`` from the iteration's results dir, or
-    ``None`` if absent / malformed.
+    """Parse ``<iter_results>/output.json``.
 
-    Treating malformed as absent (rather than raising) preserves the
-    "runner without structured output" path; the caller will fall back
-    to the runner's exit-code success.
+    Returns ``None`` only when the file does not exist (legacy
+    runners). Raises :class:`_OutputJsonError` if the file is present
+    but unreadable, isn't valid JSON, or doesn't decode to a JSON
+    object — those are runner bugs that should fail the run loudly,
+    not be silently absorbed into the exit-code path.
     """
     path = iter_results / "output.json"
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    return data if isinstance(data, dict) else None
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        msg = f"could not read {path.name}: {exc}"
+        raise _OutputJsonError(msg) from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        msg = f"{path.name} is not valid JSON: {exc}"
+        raise _OutputJsonError(msg) from exc
+    if not isinstance(data, dict):
+        msg = f"{path.name} root must be an object, got {type(data).__name__}"
+        raise _OutputJsonError(msg)
+    return data
 
 
 def _matches_expected(

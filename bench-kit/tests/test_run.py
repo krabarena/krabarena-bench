@@ -390,6 +390,89 @@ def test_run_battle_keeps_success_when_output_matches_expected(
     assert data["summary"][0]["metrics"]["success_rate"] == 1.0
 
 
+def test_run_battle_marks_malformed_output_json_as_failed(
+    battle_with_fake_runner: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A runner that writes garbage to output.json must fail the iteration.
+
+    Distinct from "no output.json at all" — that case keeps the runner's
+    exit-code success for back-compat with legacy runners. Garbage is a
+    runner bug we want to surface.
+    """
+    target = battle_with_fake_runner
+    (target / "runners" / "example.py").write_text(
+        textwrap.dedent(
+            f"""
+            from bench_kit.runner_base import Runner, RunMetrics, RunResult, Task
+
+            class FakeRunner(Runner):
+                name = "example"
+                image = "{_VALID_IMAGE}"
+
+                def run(self, task: Task) -> RunResult:
+                    task.results_dir.mkdir(parents=True, exist_ok=True)
+                    (task.results_dir / "output.json").write_text(
+                        "this is not json",
+                        encoding="utf-8",
+                    )
+                    return RunResult(
+                        success=True,
+                        metrics=RunMetrics(wall_clock_ms=1, peak_rss_mb=1, cpu_time_ms=1),
+                        logs_path=task.results_dir,
+                    )
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+
+    up, down = _stub_compose(target)
+    with up, down:
+        out = run_battle(target, RunOptions())
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert all(r["success"] is False for r in data["runs"])
+    captured = capsys.readouterr()
+    assert "malformed" in captured.err
+
+
+def test_run_battle_marks_non_dict_output_json_as_failed(
+    battle_with_fake_runner: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """output.json must decode to an object, not an array or scalar."""
+    target = battle_with_fake_runner
+    (target / "runners" / "example.py").write_text(
+        textwrap.dedent(
+            f"""
+            from bench_kit.runner_base import Runner, RunMetrics, RunResult, Task
+
+            class FakeRunner(Runner):
+                name = "example"
+                image = "{_VALID_IMAGE}"
+
+                def run(self, task: Task) -> RunResult:
+                    task.results_dir.mkdir(parents=True, exist_ok=True)
+                    (task.results_dir / "output.json").write_text(
+                        "[1, 2, 3]",  # JSON-valid but not an object
+                        encoding="utf-8",
+                    )
+                    return RunResult(
+                        success=True,
+                        metrics=RunMetrics(wall_clock_ms=1, peak_rss_mb=1, cpu_time_ms=1),
+                        logs_path=task.results_dir,
+                    )
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+
+    up, down = _stub_compose(target)
+    with up, down:
+        out = run_battle(target, RunOptions())
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert all(r["success"] is False for r in data["runs"])
+    captured = capsys.readouterr()
+    assert "must be an object" in captured.err
+
+
 def test_run_battle_no_output_json_falls_back_to_runner_success(
     battle_with_fake_runner: Path,
 ) -> None:
