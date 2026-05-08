@@ -32,6 +32,7 @@ from bench_kit.run import (
     _build_summary,
     _load_runners,
     _load_tasks,
+    _matches_expected,
     _percentile,
     run_battle,
 )
@@ -255,6 +256,151 @@ def test_run_battle_rejects_results_dir_outside_battle(
     up, down = _stub_compose(battle_with_fake_runner)
     with up, down, pytest.raises(RunError, match="outside the battle directory"):
         run_battle(battle_with_fake_runner, RunOptions(results_dir=outside))
+
+
+# ---------------------------------------------------------------------------
+# expected-vs-output enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_matches_expected_happy_path() -> None:
+    ok, msg = _matches_expected({"count": 50, "title": "x"}, {"count": 50, "title": "x"})
+    assert ok is True
+    assert msg is None
+
+
+def test_matches_expected_mismatch_explains() -> None:
+    ok, msg = _matches_expected({"count": 51}, {"count": 50})
+    assert ok is False
+    assert msg is not None
+    assert "count" in msg
+    assert "50" in msg
+    assert "51" in msg
+
+
+def test_matches_expected_skips_placeholder_keys() -> None:
+    """Keys present in expected but absent from output are skipped."""
+    ok, msg = _matches_expected(
+        {"count": 50},
+        {"count": 50, "hash_present": True},  # hash_present is a placeholder
+    )
+    assert ok is True
+    assert msg is None
+
+
+def test_matches_expected_empty() -> None:
+    ok, msg = _matches_expected({"count": 1}, {})
+    assert ok is True
+    assert msg is None
+
+
+def test_matches_expected_deep() -> None:
+    """Deep equality — nested dicts and lists compared structurally."""
+    ok, _ = _matches_expected(
+        {"items": [{"id": 1}, {"id": 2}]},
+        {"items": [{"id": 1}, {"id": 2}]},
+    )
+    assert ok is True
+    ok2, _ = _matches_expected(
+        {"items": [{"id": 1}, {"id": 2}]},
+        {"items": [{"id": 1}, {"id": 99}]},
+    )
+    assert ok2 is False
+
+
+def test_run_battle_marks_mismatching_output_as_failed(
+    battle_with_fake_runner: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A runner that exits 0 but writes wrong output.json is recorded as failed."""
+    # Replace the fake runner with one that writes output.json with WRONG values
+    # against the task's expected block (`count: 100` per the scaffold).
+    target = battle_with_fake_runner
+    (target / "runners" / "example.py").write_text(
+        textwrap.dedent(
+            f"""
+            import json
+            from bench_kit.runner_base import Runner, RunMetrics, RunResult, Task
+
+            class FakeRunner(Runner):
+                name = "example"
+                image = "{_VALID_IMAGE}"
+
+                def run(self, task: Task) -> RunResult:
+                    task.results_dir.mkdir(parents=True, exist_ok=True)
+                    (task.results_dir / "output.json").write_text(
+                        json.dumps({{"count": 999}}),  # task expects 100
+                        encoding="utf-8",
+                    )
+                    return RunResult(
+                        success=True,
+                        metrics=RunMetrics(wall_clock_ms=1, peak_rss_mb=1, cpu_time_ms=1),
+                        logs_path=task.results_dir,
+                    )
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+
+    up, down = _stub_compose(target)
+    with up, down:
+        out = run_battle(target, RunOptions())
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert all(r["success"] is False for r in data["runs"])
+    assert data["summary"][0]["metrics"]["success_rate"] == 0.0
+    captured = capsys.readouterr()
+    assert "expected.count=100" in captured.err
+
+
+def test_run_battle_keeps_success_when_output_matches_expected(
+    battle_with_fake_runner: Path,
+) -> None:
+    """A runner that writes output.json with values matching expected stays success."""
+    target = battle_with_fake_runner
+    (target / "runners" / "example.py").write_text(
+        textwrap.dedent(
+            f"""
+            import json
+            from bench_kit.runner_base import Runner, RunMetrics, RunResult, Task
+
+            class FakeRunner(Runner):
+                name = "example"
+                image = "{_VALID_IMAGE}"
+
+                def run(self, task: Task) -> RunResult:
+                    task.results_dir.mkdir(parents=True, exist_ok=True)
+                    (task.results_dir / "output.json").write_text(
+                        json.dumps({{"count": 100}}),  # matches task.expected
+                        encoding="utf-8",
+                    )
+                    return RunResult(
+                        success=True,
+                        metrics=RunMetrics(wall_clock_ms=1, peak_rss_mb=1, cpu_time_ms=1),
+                        logs_path=task.results_dir,
+                    )
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+
+    up, down = _stub_compose(target)
+    with up, down:
+        out = run_battle(target, RunOptions())
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert all(r["success"] is True for r in data["runs"])
+    assert data["summary"][0]["metrics"]["success_rate"] == 1.0
+
+
+def test_run_battle_no_output_json_falls_back_to_runner_success(
+    battle_with_fake_runner: Path,
+) -> None:
+    """Runners that don't write output.json keep their reported success."""
+    # The default fake runner in the fixture writes log.jsonl but no output.json.
+    # That runner's RunResult.success=True must propagate unchanged.
+    up, down = _stub_compose(battle_with_fake_runner)
+    with up, down:
+        out = run_battle(battle_with_fake_runner, RunOptions())
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert all(r["success"] is True for r in data["runs"])
 
 
 def test_run_battle_fails_on_validation(tmp_path: Path) -> None:
