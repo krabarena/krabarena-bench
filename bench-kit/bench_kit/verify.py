@@ -151,6 +151,9 @@ def verify_bundle(
         return _verify_with_source(bundle_path, meta, source_dir, output_path)
 
     if keep_source is not None:
+        if keep_source.exists() and not keep_source.is_dir():
+            msg = f"--keep-source {keep_source} exists and is not a directory"
+            raise VerifyError(msg)
         keep_source.mkdir(parents=True, exist_ok=True)
         if any(keep_source.iterdir()):
             msg = f"--keep-source {keep_source} must be empty"
@@ -235,11 +238,18 @@ def _resolve_clone_url(repo: str) -> str:
 
 
 def _auto_clone(repo: str, commit: str, target: Path) -> Path:
-    """Clone ``repo`` into ``target`` and check out exactly ``commit``.
+    """Fetch ``repo`` at exactly ``commit`` into ``target``.
 
-    Raises :class:`VerifyError` if git is missing, the clone fails,
-    the commit cannot be checked out, or the resulting HEAD does not
-    match ``commit`` (defence against silent server-side rewrites).
+    Tries a shallow fetch-by-SHA first (one commit, no history, no
+    tags) — orders of magnitude faster for any non-trivial repo and
+    supported by GitHub plus most modern Git hosts. Falls back to a
+    full ``git clone`` + ``git checkout`` if the server refuses
+    (older Gitea / custom hosts without
+    ``uploadpack.allowReachableSHA1InWant``).
+
+    Raises :class:`VerifyError` if git is missing, both fetch paths
+    fail, or the resulting HEAD does not match ``commit`` (defence
+    against silent server-side rewrites).
     """
     if shutil.which("git") is None:
         msg = "git not found on PATH; install it or pass --source <local-checkout>"
@@ -251,11 +261,19 @@ def _auto_clone(repo: str, commit: str, target: Path) -> Path:
     url = _resolve_clone_url(repo)
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    _run_git(["clone", "--quiet", url, str(target)], timeout=_TIMEOUT_CLONE_S)
-    _run_git(
-        ["-C", str(target), "checkout", "--quiet", commit],
-        timeout=_TIMEOUT_CHECKOUT_S,
-    )
+    try:
+        _shallow_fetch(url, commit, target)
+    except VerifyError as shallow_exc:
+        # Wipe whatever partial state the shallow attempt left behind
+        # (init may have run before fetch failed) and try the full
+        # clone path.
+        shutil.rmtree(target, ignore_errors=True)
+        try:
+            _full_clone(url, commit, target)
+        except VerifyError as full_exc:
+            msg = f"both shallow and full clone failed; shallow: {shallow_exc}; full: {full_exc}"
+            raise VerifyError(msg) from full_exc
+
     head = _run_git(
         ["-C", str(target), "rev-parse", "HEAD"],
         timeout=_TIMEOUT_REVPARSE_S,
@@ -264,6 +282,42 @@ def _auto_clone(repo: str, commit: str, target: Path) -> Path:
         msg = f"checkout landed on {head[:12]} but bundle requires {commit[:12]}; aborting"
         raise VerifyError(msg)
     return target
+
+
+def _shallow_fetch(url: str, commit: str, target: Path) -> None:
+    """One-commit fetch — fastest path when the host supports it."""
+    target.mkdir(parents=True, exist_ok=True)
+    _run_git(["-C", str(target), "init", "--quiet"], timeout=_TIMEOUT_REVPARSE_S)
+    _run_git(
+        ["-C", str(target), "remote", "add", "origin", url],
+        timeout=_TIMEOUT_REVPARSE_S,
+    )
+    _run_git(
+        [
+            "-C",
+            str(target),
+            "fetch",
+            "--quiet",
+            "--depth=1",
+            "--no-tags",
+            "origin",
+            commit,
+        ],
+        timeout=_TIMEOUT_CLONE_S,
+    )
+    _run_git(
+        ["-C", str(target), "checkout", "--quiet", "FETCH_HEAD"],
+        timeout=_TIMEOUT_CHECKOUT_S,
+    )
+
+
+def _full_clone(url: str, commit: str, target: Path) -> None:
+    """Full-history clone fallback for hosts that reject single-SHA fetch."""
+    _run_git(["clone", "--quiet", url, str(target)], timeout=_TIMEOUT_CLONE_S)
+    _run_git(
+        ["-C", str(target), "checkout", "--quiet", commit],
+        timeout=_TIMEOUT_CHECKOUT_S,
+    )
 
 
 def _run_git(args: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
@@ -323,14 +377,14 @@ def _locate_battle(source_dir: Path, battle_id: str) -> Path:
 
 
 def _commit_matches(source_dir: Path, expected: str) -> bool:
-    proc = subprocess.run(
-        ["git", "-C", str(source_dir), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        timeout=_TIMEOUT_REVPARSE_S,
-        check=False,
-    )
-    return proc.returncode == 0 and proc.stdout.strip() == expected
+    try:
+        proc = _run_git(
+            ["-C", str(source_dir), "rev-parse", "HEAD"],
+            timeout=_TIMEOUT_REVPARSE_S,
+        )
+    except VerifyError:
+        return False
+    return proc.stdout.strip() == expected
 
 
 def _load_tolerances(battle_dir: Path) -> dict[str, float]:
