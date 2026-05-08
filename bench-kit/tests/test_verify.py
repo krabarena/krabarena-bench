@@ -210,23 +210,20 @@ def test_resolve_clone_url_accepts(repo: str, expected: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-# The merge commit of PR #1 — first stable SHA on `main` of this very
-# repo. Pinned here forever; if rebased into oblivion (it won't be —
-# we'd preserve merge history), refresh.
-_FIRST_STABLE_SHA = "22887f9dc4503abc058f7f734d5f367ac12191a0"
+# `octocat/Hello-World` is a small, public, very-stable demo repo
+# GitHub maintains specifically as a target for examples and tests.
+# We use it instead of this very repo for the network integration so
+# the test works regardless of `keenableai/krabarena-bench`'s visibility.
+_PUBLIC_TEST_REPO = "github.com/octocat/Hello-World"
+_PUBLIC_TEST_COMMIT = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 
 
 @pytest.mark.network
 def test_auto_clone_real_repo(tmp_path: Path) -> None:
-    """Pulls a known-good SHA out of the project's own GitHub repo."""
+    """Clone a known stable SHA out of GitHub's demo repo and assert HEAD."""
     target = tmp_path / "src"
-    cloned = _auto_clone(
-        "github.com/keenableai/krabarena-bench",
-        _FIRST_STABLE_SHA,
-        target,
-    )
-    assert (cloned / "SPEC.md").is_file()
-    assert (cloned / "bench-kit" / "bench_kit" / "__init__.py").is_file()
+    cloned = _auto_clone(_PUBLIC_TEST_REPO, _PUBLIC_TEST_COMMIT, target)
+    assert (cloned / "README").is_file()
 
 
 @pytest.mark.network
@@ -235,7 +232,7 @@ def test_auto_clone_rejects_bogus_commit(tmp_path: Path) -> None:
     target = tmp_path / "src"
     with pytest.raises(VerifyError):
         _auto_clone(
-            "github.com/keenableai/krabarena-bench",
+            _PUBLIC_TEST_REPO,
             "deadbeef" * 5,  # 40-hex but not a real commit
             target,
         )
