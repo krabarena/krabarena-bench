@@ -198,7 +198,6 @@ def test_verify_keep_source_must_be_empty(tmp_path: Path) -> None:
             "https://github.com/keenableai/krabarena-bench.git",
             "https://github.com/keenableai/krabarena-bench.git",
         ),
-        ("http://example.com/foo", "http://example.com/foo.git"),
     ],
 )
 def test_resolve_clone_url_accepts(repo: str, expected: str) -> None:
@@ -241,6 +240,10 @@ def test_auto_clone_rejects_bogus_commit(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "bad",
     [
+        # Plain HTTP is MITM-tamperable; verify executes runner code from
+        # the clone, so we refuse it.
+        "http://example.com/foo",
+        "http://github.com/keenableai/krabarena-bench",
         "git@github.com:keenableai/krabarena-bench.git",
         "ssh://git@github.com/keenableai/krabarena-bench.git",
         "file:///etc/passwd",

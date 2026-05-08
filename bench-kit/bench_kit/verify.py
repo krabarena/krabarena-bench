@@ -216,19 +216,25 @@ def _resolve_clone_url(repo: str) -> str:
 
     Accepts the canonical slug form ``github.com/<owner>/<name>`` and
     full ``https://`` URLs (with or without ``.git`` suffix). Refuses
-    SSH (`git@…`), `file://`, and any other scheme — verifiers should
-    normalise to HTTPS or clone manually and pass ``--source``.
+    everything else — plain HTTP (MITM-tamperable), SSH (``git@…``,
+    needs verifier-side keys), ``file://``, and any other scheme.
+    Verifiers who need a non-https source should clone manually and
+    pass ``--source``.
     """
     repo = repo.strip()
     if not repo:
         msg = "battle_repo is empty"
         raise VerifyError(msg)
-    if repo.startswith(("https://", "http://")):
+    if repo.startswith("https://"):
         return repo if repo.endswith(".git") else f"{repo}.git"
     if "://" in repo or repo.startswith("git@"):
+        # Includes http:// — plain HTTP is rejected because verify
+        # *executes* the cloned runner code, and MITM tampering on
+        # an http transport silently substitutes whatever the
+        # attacker wants run on the verifier's host.
         msg = (
-            f"battle_repo {repo!r} must be an HTTPS slug or URL; SSH and "
-            f"non-https schemes are refused (clone manually and pass --source)"
+            f"battle_repo {repo!r} must use https://; plain http, ssh, file "
+            f"and other schemes are refused (clone manually and pass --source)"
         )
         raise VerifyError(msg)
     if not _REPO_SLUG_RE.match(repo):
@@ -331,14 +337,30 @@ def _run_git(args: list[str], *, timeout: float) -> subprocess.CompletedProcess[
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        msg = f"git {args[0]} timed out after {timeout}s"
+        msg = f"git {_subcommand_for_message(args)} timed out after {timeout}s"
         raise VerifyError(msg) from exc
     if proc.returncode != 0:
         # Surface git's stderr verbatim — it's already user-friendly enough
         # (e.g. "fatal: Authentication failed", "fatal: reference is not a tree").
-        msg = f"git {args[0]} failed: {proc.stderr.strip() or proc.stdout.strip()}"
+        msg = (
+            f"git {_subcommand_for_message(args)} failed: "
+            f"{proc.stderr.strip() or proc.stdout.strip()}"
+        )
         raise VerifyError(msg)
     return proc
+
+
+def _subcommand_for_message(args: list[str]) -> str:
+    """Pick a human-readable subcommand label for an error message.
+
+    Many of our calls are ``["-C", "<dir>", "<cmd>", ...]``; reporting
+    ``args[0]`` would surface ``"git -C failed"``, which tells the
+    user nothing. Skip the global flag pair so the actual subcommand
+    (clone, fetch, checkout, rev-parse) reaches the log.
+    """
+    if len(args) >= 3 and args[0] == "-C":
+        return args[2]
+    return args[0] if args else "<empty>"
 
 
 # ---------------------------------------------------------------------------
