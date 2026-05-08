@@ -19,9 +19,19 @@
 
 "use strict";
 
+const { createHash } = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { isDeepStrictEqual } = require("node:util");
 const { chromium } = require("playwright");
+
+function sha256(s) {
+  return createHash("sha256").update(s).digest("hex");
+}
+
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
 
 function parseArgs(argv) {
   const out = {};
@@ -94,13 +104,13 @@ const TASKS = {
     // Hash the harvested texts in DOM order, joined with `\n`.
     // Catches "right count, wrong content" where a runtime renders
     // the items but with mangled text — the count predicate alone
-    // would silently pass.
+    // would silently pass. Harvest is inside the timed region but
+    // symmetric across runtimes (same code path), so it does not
+    // bias the comparison.
     const texts = await page.$$eval("#items li", (els) =>
       els.map((el) => el.textContent.trim()),
     );
-    const { createHash } = require("node:crypto");
-    const items_hash = createHash("sha256").update(texts.join("\n")).digest("hex");
-    return { count: current, items_hash };
+    return { count: current, items_hash: sha256(texts.join("\n")) };
   },
 
   "xhr-driven": async (browser, target) => {
@@ -136,9 +146,7 @@ const TASKS = {
     const dataUrl = await page.evaluate(() =>
       document.getElementById("c").toDataURL(),
     );
-    const { createHash } = require("node:crypto");
-    const canvas_hash = createHash("sha256").update(dataUrl).digest("hex");
-    return { canvas_hash };
+    return { canvas_hash: sha256(dataUrl) };
   },
 
   "client-router": async (browser, target) => {
@@ -163,22 +171,35 @@ function findExpectedMismatch(output, expected) {
   // also exists in `output`, the values must be deep-equal. Keys in
   // `expected` that are absent from `output` are treated as
   // documentation-only placeholders (e.g. `hash_present: true` on
-  // canvas-render before the golden hash is pinned).
-  if (!expected || typeof expected !== "object") return null;
+  // canvas-render before the golden hash is pinned). Skipped keys
+  // are warned to stderr so a typo (`itmes_hash` vs `items_hash`) is
+  // visible in the orchestrator log instead of silently passing.
+  if (!isPlainObject(expected)) return null;
   for (const [key, want] of Object.entries(expected)) {
-    if (!(key in output)) continue;
-    const got = output[key];
-    if (JSON.stringify(got) !== JSON.stringify(want)) {
-      return { key, expected: want, got };
+    if (!(key in output)) {
+      console.warn(`drive.js: expected.${key} skipped (key absent from output)`);
+      continue;
+    }
+    if (!isDeepStrictEqual(output[key], want)) {
+      return { key, expected: want, got: output[key] };
     }
   }
   return null;
 }
 
+function parseJsonObjectArg(name, raw) {
+  if (raw === undefined) return {};
+  const value = JSON.parse(raw);
+  if (!isPlainObject(value)) {
+    throw new Error(`--${name} must be a JSON object, got ${typeof value}`);
+  }
+  return value;
+}
+
 async function main() {
   const args = parseArgs(process.argv);
-  const inputs = args.inputs ? JSON.parse(args.inputs) : {};
-  const expected = args.expected ? JSON.parse(args.expected) : {};
+  const inputs = parseJsonObjectArg("inputs", args.inputs);
+  const expected = parseJsonObjectArg("expected", args.expected);
   const handler = TASKS[args.task];
   if (!handler) {
     throw new Error(`unknown task: ${args.task}`);
