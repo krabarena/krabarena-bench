@@ -91,7 +91,16 @@ const TASKS = {
       );
       current = next;
     }
-    return { count: current };
+    // Hash the harvested texts in DOM order, joined with `\n`.
+    // Catches "right count, wrong content" where a runtime renders
+    // the items but with mangled text — the count predicate alone
+    // would silently pass.
+    const texts = await page.$$eval("#items li", (els) =>
+      els.map((el) => el.textContent.trim()),
+    );
+    const { createHash } = require("node:crypto");
+    const items_hash = createHash("sha256").update(texts.join("\n")).digest("hex");
+    return { count: current, items_hash };
   },
 
   "xhr-driven": async (browser, target) => {

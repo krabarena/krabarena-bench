@@ -12,6 +12,11 @@ inputs:
   target_count: 200
 expected:
   count: 200
+  # `items_hash` is collected by the harness (sha256 over harvested
+  # texts in DOM order, joined with newline). Pin the golden value
+  # here after the first verified Browserless run; until then the
+  # predicate only enforces count, with items_hash present in
+  # output.json for diagnostic comparison.
 success_predicate: "output.count == expected.count"
 timeout_s: 60
 iterations: 5
