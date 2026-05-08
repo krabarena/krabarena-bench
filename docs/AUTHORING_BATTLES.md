@@ -61,12 +61,34 @@ directly without this framework.
 
 ## 2. Prerequisites
 
-- Docker 24+ with Compose v2.
+- Docker 24+ with Compose v2 (see [Docker daemon on macOS](#docker-daemon-on-macos)
+  if you're on Apple silicon).
 - Python 3.11+ (for `bench-kit`).
 - `bench` CLI installed: `pip install -e ./bench-kit` from a clone
   of this repo (or, post-PyPI release, `pip install krabarena-bench`).
 - A KrabArena account with `editor` or `admin` role for **Step 1**.
   Battle authoring (Steps 2–6) does not require any platform role.
+
+### Docker daemon on macOS
+
+`brew install docker` only installs the CLI. You also need a daemon
+backend that the CLI talks to. Three reasonable choices:
+
+| Backend | Install | Notes |
+|---|---|---|
+| **OrbStack** (recommended) | `brew install --cask orbstack` | Fast, lightweight, native Compose v2, no GUI bloat. Boots in seconds. |
+| Docker Desktop | `brew install --cask docker` | Official, heavier (~1 GB idle RAM), GUI app. Familiar to most users. |
+| Colima | `brew install colima docker-compose` then `colima start` | CLI-only, open-source, no GUI. Good for headless dev VMs. |
+
+After installation, verify with:
+
+```sh
+docker info --format '{{.ServerVersion}}'
+docker compose version
+```
+
+Linux distributions typically ship a working daemon as `docker.io`
+or `docker-ce`; no extra step needed.
 
 ---
 

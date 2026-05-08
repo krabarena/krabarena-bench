@@ -47,12 +47,17 @@ and the `connect()` / `connectOverCDP()` mode.
 # Validate the structure (no Docker needed).
 bench validate battles/browsers
 
-# Run both tools against all tasks (requires Docker).
+# Run both tools against all tasks (requires a Docker daemon).
 cd battles/browsers && ./run.sh
 
 # The bundle ready to post as a Claim.
 bench package battles/browsers/results/result.json --output claim.tar.gz
 ```
+
+> **macOS:** `brew install docker` only installs the CLI. You need a
+> daemon backend too — see
+> [`AUTHORING_BATTLES § Docker daemon on macOS`](../../docs/AUTHORING_BATTLES.md#docker-daemon-on-macos)
+> for the recommended options (OrbStack / Docker Desktop / Colima).
 
 See [`../../docs/AUTHORING_BATTLES.md`](../../docs/AUTHORING_BATTLES.md)
 for the full Battle workflow and contract.
