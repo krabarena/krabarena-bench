@@ -7,9 +7,12 @@ import json
 from bench_kit.exec import run_task_in_sandbox
 from bench_kit.runner_base import Runner, RunResult, Task
 
-_PLAYWRIGHT_IMAGE = (
-    "mcr.microsoft.com/playwright"
-    "@sha256:b0ab6f3cb99aa7803adbc14d9027ec1785fc6e433b97e134e0f8fe61683b6b53"
+# Same harness image as the browserless runner; symmetry across
+# tools is editorial. See runners/browserless.py for the rationale
+# and publish workflow.
+_HARNESS_IMAGE = (
+    "ghcr.io/keenableai/krabarena-bench-browsers-harness"
+    "@sha256:06df2018065532f00294cd4ba26cd1010238e3f00b38985c341f4e3f99a05c99"
 )
 _BROWSER_ENDPOINT = "http://lightpanda:9222"
 
@@ -24,7 +27,7 @@ class LightpandaRunner(Runner):
     def run(self, task: Task) -> RunResult:
         return run_task_in_sandbox(
             task,
-            image=_PLAYWRIGHT_IMAGE,
+            image=_HARNESS_IMAGE,
             args=[
                 "node",
                 "/task/harness/drive.js",

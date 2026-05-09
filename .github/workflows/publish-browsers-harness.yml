@@ -45,12 +45,17 @@ jobs:
           context: battles/browsers/harness
           platforms: linux/amd64,linux/arm64
           push: true
+          # Floating `:latest` for humans + immutable `:<sha>` for the
+          # build commit. Runners always pin by `@sha256:...` digest
+          # (printed in the job summary below), so a static semver tag
+          # would just be a lie waiting to drift.
           tags: |
-            ghcr.io/keenableai/krabarena-bench-browsers-harness:v0.1.0
             ghcr.io/keenableai/krabarena-bench-browsers-harness:${{ github.sha }}
             ghcr.io/keenableai/krabarena-bench-browsers-harness:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scoped cache so this workflow can't be evicted by louder
+          # neighbours sharing the repo's GHA cache budget.
+          cache-from: type=gha,scope=browsers-harness
+          cache-to: type=gha,mode=max,scope=browsers-harness
 
       - name: Surface digest in job summary
         run: |

@@ -23,9 +23,25 @@ services:
   lightpanda:
     image: lightpanda/browser@sha256:0283ba962dffe2f7b46a29377276837b033b1174b92b5a30da641a1b1561ef5c
     networks: [bench]
-    # The image's default CMD is `/bin/lightpanda serve --host 0.0.0.0
-    # --port 9222 --log_level info`; overriding `command:` here would
-    # drop the absolute path and exit 127 ("serve: not found").
+    # Default CMD is `/bin/lightpanda serve --host 0.0.0.0 --port 9222
+    # --log_level info`. We re-issue it (with the absolute path —
+    # without it the override exits 127) and add `--advertise-host
+    # lightpanda` so Playwright's `connectOverCDP` gets a routable
+    # WebSocket URL. Without that flag Lightpanda advertises
+    # `ws://0.0.0.0:9222/...` to the client; Playwright connects to
+    # 0.0.0.0 literally, which from inside the harness container is
+    # itself (ECONNREFUSED), and every iteration fails.
+    command:
+      - "/bin/lightpanda"
+      - "serve"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "9222"
+      - "--advertise-host"
+      - "lightpanda"
+      - "--log_level"
+      - "info"
     healthcheck:
       # The lightpanda image has no wget / curl / nc, but it does have
       # bash with /dev/tcp support — that's enough to verify the CDP
