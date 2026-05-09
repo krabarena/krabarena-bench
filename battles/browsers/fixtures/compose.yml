@@ -9,7 +9,12 @@ services:
       TOKEN: krabarena
       CONCURRENT: "16"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --tries=1 -O - http://localhost:3000/json/version || exit 1"]
+      # `/json/version` requires the token in v2; without it the server
+      # returns 401 and the healthcheck fails forever. 127.0.0.1 (not
+      # localhost) avoids the IPv6 fallback issue that bites alpine wget.
+      test:
+        - "CMD-SHELL"
+        - "wget -q --tries=1 -O - 'http://127.0.0.1:3000/json/version?token=krabarena' || exit 1"
       interval: 5s
       timeout: 3s
       retries: 20
@@ -18,9 +23,16 @@ services:
   lightpanda:
     image: lightpanda/browser@sha256:0283ba962dffe2f7b46a29377276837b033b1174b92b5a30da641a1b1561ef5c
     networks: [bench]
-    command: ["serve", "--host", "0.0.0.0", "--port", "9222"]
+    # The image's default CMD is `/bin/lightpanda serve --host 0.0.0.0
+    # --port 9222 --log_level info`; overriding `command:` here would
+    # drop the absolute path and exit 127 ("serve: not found").
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --tries=1 -O - http://localhost:9222/json/version || exit 1"]
+      # The lightpanda image has no wget / curl / nc, but it does have
+      # bash with /dev/tcp support — that's enough to verify the CDP
+      # port is accepting connections without HTTP-level probing.
+      test:
+        - "CMD-SHELL"
+        - "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9222' || exit 1"
       interval: 5s
       timeout: 3s
       retries: 20
@@ -30,7 +42,9 @@ services:
     build: ./app
     networks: [bench]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --tries=1 -O - http://localhost/healthz || exit 1"]
+      # 127.0.0.1, not localhost — alpine's wget tries ::1 first and
+      # the Node Express server only binds IPv4 (`0.0.0.0`).
+      test: ["CMD-SHELL", "wget -q --tries=1 -O - http://127.0.0.1/healthz || exit 1"]
       interval: 3s
       timeout: 2s
       retries: 10

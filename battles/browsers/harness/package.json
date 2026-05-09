@@ -1,0 +1,9 @@
+{
+  "name": "krabarena-bench-browsers-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "1.59.1"
+  }
+}
