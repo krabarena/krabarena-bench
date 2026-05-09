@@ -12,7 +12,7 @@ from bench_kit.runner_base import Runner, RunResult, Task
 # and publish workflow.
 _HARNESS_IMAGE = (
     "ghcr.io/keenableai/krabarena-bench-browsers-harness"
-    "@sha256:06df2018065532f00294cd4ba26cd1010238e3f00b38985c341f4e3f99a05c99"
+    "@sha256:f612952c0c09b609dcf428f63d1ac44b93d1fdbfda78f0c7bf35e1b5d35b23ed"
 )
 _BROWSER_ENDPOINT = "http://lightpanda:9222"
 
