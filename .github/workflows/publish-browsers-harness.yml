@@ -1,0 +1,65 @@
+name: Publish browsers harness image
+
+# Builds the multi-arch harness image used by both runners in
+# battles/browsers — `mcr.microsoft.com/playwright` + the Playwright
+# npm package. Pushed to GHCR so verifiers anywhere pull the same
+# bytes; never built on a contributor's laptop for a real bundle.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "battles/browsers/harness/**"
+      - ".github/workflows/publish-browsers-harness.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: build + push (linux/amd64,linux/arm64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU (for cross-arch builds)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: battles/browsers/harness
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/keenableai/krabarena-bench-browsers-harness:v0.1.0
+            ghcr.io/keenableai/krabarena-bench-browsers-harness:${{ github.sha }}
+            ghcr.io/keenableai/krabarena-bench-browsers-harness:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Surface digest in job summary
+        run: |
+          {
+            echo "## Published image"
+            echo ""
+            echo "\`\`\`"
+            echo "ghcr.io/keenableai/krabarena-bench-browsers-harness@${{ steps.build.outputs.digest }}"
+            echo "\`\`\`"
+            echo ""
+            echo "Update both runners' \`_HARNESS_IMAGE\` constant to this digest."
+          } >> "$GITHUB_STEP_SUMMARY"
