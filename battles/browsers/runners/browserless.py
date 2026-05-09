@@ -7,12 +7,17 @@ import json
 from bench_kit.exec import run_task_in_sandbox
 from bench_kit.runner_base import Runner, RunResult, Task
 
-# Microsoft's Playwright runtime. The image being benchmarked is the
-# browser (see ``image`` below); this is just the harness-side library
-# that speaks to it. Pinned by digest for reproducibility.
-_PLAYWRIGHT_IMAGE = (
-    "mcr.microsoft.com/playwright"
-    "@sha256:b0ab6f3cb99aa7803adbc14d9027ec1785fc6e433b97e134e0f8fe61683b6b53"
+# Our own thin layer over `mcr.microsoft.com/playwright` adding the
+# `playwright` npm package — the upstream MCR image ships browsers
+# but not the SDK. Built and pushed by GHA on changes to
+# ``battles/browsers/harness/`` (see
+# ``.github/workflows/publish-browsers-harness.yml``); pinned by
+# manifest digest so the same bytes run for claimer and verifier.
+# The image we're *benchmarking* is `image` below — this is purely
+# the harness driving it.
+_HARNESS_IMAGE = (
+    "ghcr.io/keenableai/krabarena-bench-browsers-harness"
+    "@sha256:06df2018065532f00294cd4ba26cd1010238e3f00b38985c341f4e3f99a05c99"
 )
 _BROWSER_ENDPOINT = "ws://browserless:3000?token=krabarena"
 
@@ -27,7 +32,7 @@ class BrowserlessRunner(Runner):
     def run(self, task: Task) -> RunResult:
         return run_task_in_sandbox(
             task,
-            image=_PLAYWRIGHT_IMAGE,
+            image=_HARNESS_IMAGE,
             args=[
                 "node",
                 "/task/harness/drive.js",
