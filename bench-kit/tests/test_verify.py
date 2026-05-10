@@ -288,8 +288,8 @@ def test_load_tolerances_merges_meta_over_schema_defaults(tmp_path: Path) -> Non
     """
     (tmp_path / "meta.yaml").write_text(
         "tolerances:\n"
-        "  wall_clock_ms_p50: 0.10\n"   # explicitly tightened
-        "  peak_rss_mb: 0.25\n",         # explicitly tightened
+        "  wall_clock_ms_p50: 0.10\n"  # explicitly tightened
+        "  peak_rss_mb: 0.25\n",  # explicitly tightened
         encoding="utf-8",
     )
     tols = _load_tolerances(tmp_path)
