@@ -142,6 +142,90 @@ def test_package_is_byte_deterministic(tmp_path: Path) -> None:
     assert a.read_bytes() == b.read_bytes()
 
 
+# ---------------------------------------------------------------------------
+# optional doc files (README.md, RUN.md, structure.json)
+# ---------------------------------------------------------------------------
+
+
+def test_package_with_all_extras(tmp_path: Path) -> None:
+    result_path = tmp_path / "result.json"
+    _write_minimal_result(result_path)
+    readme = tmp_path / "README.md"
+    readme.write_text("# Title\n\nBody.\n", encoding="utf-8")
+    runbook = tmp_path / "RUN.md"
+    runbook.write_text("Run with: bench run .\n", encoding="utf-8")
+    structure = tmp_path / "structure.json"
+    structure.write_text('{"schema_version": 1}', encoding="utf-8")
+
+    bundle = tmp_path / "claim.tar.gz"
+    package_bundle(
+        result_path,
+        bundle,
+        readme=readme,
+        runbook=runbook,
+        structure=structure,
+    )
+
+    with gzip.open(bundle, "rb") as gz, tarfile.open(fileobj=gz, mode="r") as tar:
+        names = sorted(tar.getnames())
+    assert "README.md" in names
+    assert "RUN.md" in names
+    assert "structure.json" in names
+    assert "meta.json" in names
+    assert "result.json" in names
+
+
+def test_package_without_extras_keeps_pointer_only_shape(tmp_path: Path) -> None:
+    """Back-compat: package_bundle without extras produces the original shape."""
+    result_path = tmp_path / "result.json"
+    _write_minimal_result(result_path)
+    bundle = tmp_path / "claim.tar.gz"
+
+    package_bundle(result_path, bundle)
+
+    with gzip.open(bundle, "rb") as gz, tarfile.open(fileobj=gz, mode="r") as tar:
+        names = sorted(tar.getnames())
+    assert "README.md" not in names
+    assert "RUN.md" not in names
+    assert "structure.json" not in names
+
+
+def test_package_rejects_missing_extra(tmp_path: Path) -> None:
+    """A passed --readme/--runbook/--structure that points nowhere fails loudly."""
+    result_path = tmp_path / "result.json"
+    _write_minimal_result(result_path)
+    bundle = tmp_path / "claim.tar.gz"
+
+    with pytest.raises(PackageError, match=r"readme.*does not exist"):
+        package_bundle(result_path, bundle, readme=tmp_path / "nope.md")
+
+
+def test_package_rejects_invalid_structure_json(tmp_path: Path) -> None:
+    """structure.json must parse as JSON before we put it into the bundle."""
+    result_path = tmp_path / "result.json"
+    _write_minimal_result(result_path)
+    bad = tmp_path / "structure.json"
+    bad.write_text("not json {", encoding="utf-8")
+    bundle = tmp_path / "claim.tar.gz"
+
+    with pytest.raises(PackageError, match=r"structure.*not valid JSON"):
+        package_bundle(result_path, bundle, structure=bad)
+
+
+def test_package_with_extras_remains_byte_deterministic(tmp_path: Path) -> None:
+    """Two packages with the same inputs (extras included) → identical bytes."""
+    result_path = tmp_path / "result.json"
+    _write_minimal_result(result_path)
+    readme = tmp_path / "README.md"
+    readme.write_text("# x\n", encoding="utf-8")
+
+    a = tmp_path / "a.tar.gz"
+    b = tmp_path / "b.tar.gz"
+    package_bundle(result_path, a, readme=readme)
+    package_bundle(result_path, b, readme=readme)
+    assert a.read_bytes() == b.read_bytes()
+
+
 def test_read_bundle_meta_rejects_missing_file(tmp_path: Path) -> None:
     with pytest.raises(PackageError, match="does not exist"):
         read_bundle_meta(tmp_path / "nope.tar.gz")
