@@ -210,10 +210,35 @@ def _fake_run_factory(
     return fake_run
 
 
+class _FakeStatsProc:
+    """Stand-in for ``subprocess.Popen`` so the streaming-stats thread
+    in ``run_constrained`` doesn't try to spawn a real ``docker stats``
+    process during unit tests."""
+
+    def __init__(self, lines: list[str] | None = None) -> None:
+        self.stdout = iter(lines or [])
+        self.terminated = False
+        self.killed = False
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+    def wait(self, timeout: float | None = None) -> int:
+        return 0
+
+
+def _patch_stats(lines: list[str] | None = None) -> Any:
+    return patch("bench_kit.exec.subprocess.Popen", return_value=_FakeStatsProc(lines))
+
+
 def test_run_constrained_happy_path() -> None:
     with (
         patch("bench_kit.exec.shutil.which", return_value="/usr/bin/docker"),
         patch("bench_kit.exec.subprocess.run", side_effect=_fake_run_factory()),
+        _patch_stats(),
     ):
         res = run_constrained(
             image=_DIGEST,
@@ -235,6 +260,7 @@ def test_run_constrained_nonzero_exit_is_not_success() -> None:
             "bench_kit.exec.subprocess.run",
             side_effect=_fake_run_factory(attach_returncode=2),
         ),
+        _patch_stats(),
     ):
         res = run_constrained(
             image=_DIGEST,
@@ -255,6 +281,7 @@ def test_run_constrained_timeout_kills_and_reports() -> None:
             "bench_kit.exec.subprocess.run",
             side_effect=_fake_run_factory(timeout=True),
         ),
+        _patch_stats(),
     ):
         res = run_constrained(
             image=_DIGEST,
@@ -277,6 +304,7 @@ def test_run_constrained_create_failure_raises() -> None:
     with (
         patch("bench_kit.exec.shutil.which", return_value="/usr/bin/docker"),
         patch("bench_kit.exec.subprocess.run", side_effect=fake_run),
+        _patch_stats(),
         pytest.raises(ExecError, match="docker create failed"),
     ):
         run_constrained(
