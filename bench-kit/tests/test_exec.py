@@ -192,11 +192,23 @@ def _fake_run_factory(
     create_cid: str = "abc123",
     attach_returncode: int = 0,
     timeout: bool = False,
+    image_cached: bool = True,
+    pull_returncode: int = 0,
 ) -> Any:
-    """Build a fake ``subprocess.run`` that simulates create + start + rm."""
+    """Build a fake ``subprocess.run`` that simulates create + start + rm.
+
+    ``image_cached`` controls the response of ``docker image inspect``
+    (``True`` → 0, no pull needed; ``False`` → 1, triggers a pull).
+    """
 
     def fake_run(argv: list[str], **kwargs: Any) -> Any:
         cmd = argv[1] if len(argv) > 1 else ""
+        sub = argv[2] if len(argv) > 2 else ""
+        if cmd == "image" and sub == "inspect":
+            return _FakeCompleted(0 if image_cached else 1, stdout=b"", stderr=b"")
+        if cmd == "pull":
+            err = b"oops" if pull_returncode else b""
+            return _FakeCompleted(pull_returncode, stdout=b"", stderr=err)
         if cmd == "create":
             return _FakeCompleted(0, stdout=f"{create_cid}\n".encode(), stderr=b"")
         if cmd == "start":
@@ -293,6 +305,94 @@ def test_run_constrained_timeout_kills_and_reports() -> None:
     assert res.success is False
     assert res.timed_out is True
     assert res.exit_code == 124
+
+
+def test_run_constrained_pulls_image_when_not_cached() -> None:
+    """A cold-cache image goes through `docker pull` before `docker create`.
+
+    Catches the bug we shipped: `_TIMEOUT_CREATE_S=30s` was including
+    multi-GB image pulls inside the create call on fresh CI runners.
+    """
+    pull_seen: list[bool] = []
+
+    def fake_run(argv: list[str], **kwargs: Any) -> Any:
+        cmd, sub = (argv[1] if len(argv) > 1 else "", argv[2] if len(argv) > 2 else "")
+        if cmd == "image" and sub == "inspect":
+            return _FakeCompleted(1)  # not cached
+        if cmd == "pull":
+            pull_seen.append(True)
+            return _FakeCompleted(0)
+        if cmd == "create":
+            return _FakeCompleted(0, stdout=b"abc123\n")
+        if cmd == "start":
+            return _FakeCompleted(0, stdout=b"hi\n")
+        return _FakeCompleted(0)
+
+    with (
+        patch("bench_kit.exec.shutil.which", return_value="/usr/bin/docker"),
+        patch("bench_kit.exec.subprocess.run", side_effect=fake_run),
+        _patch_stats(),
+    ):
+        run_constrained(
+            image=_DIGEST,
+            args=["echo"],
+            network="n",
+            mounts=[],
+            limits=_LIMITS,
+        )
+    assert pull_seen == [True]
+
+
+def test_run_constrained_skips_pull_when_image_cached() -> None:
+    """Hot path: if `docker image inspect` succeeds, no pull happens."""
+    pull_seen: list[bool] = []
+
+    def fake_run(argv: list[str], **kwargs: Any) -> Any:
+        cmd, sub = (argv[1] if len(argv) > 1 else "", argv[2] if len(argv) > 2 else "")
+        if cmd == "image" and sub == "inspect":
+            return _FakeCompleted(0)  # cached
+        if cmd == "pull":
+            pull_seen.append(True)
+            return _FakeCompleted(0)
+        if cmd == "create":
+            return _FakeCompleted(0, stdout=b"abc123\n")
+        if cmd == "start":
+            return _FakeCompleted(0, stdout=b"hi\n")
+        return _FakeCompleted(0)
+
+    with (
+        patch("bench_kit.exec.shutil.which", return_value="/usr/bin/docker"),
+        patch("bench_kit.exec.subprocess.run", side_effect=fake_run),
+        _patch_stats(),
+    ):
+        run_constrained(
+            image=_DIGEST,
+            args=["echo"],
+            network="n",
+            mounts=[],
+            limits=_LIMITS,
+        )
+    assert pull_seen == []
+
+
+def test_run_constrained_pull_failure_raises() -> None:
+    """A failed pull surfaces as ExecError, not a stack trace."""
+    with (
+        patch("bench_kit.exec.shutil.which", return_value="/usr/bin/docker"),
+        patch(
+            "bench_kit.exec.subprocess.run",
+            side_effect=_fake_run_factory(image_cached=False, pull_returncode=1),
+        ),
+        _patch_stats(),
+        pytest.raises(ExecError, match="docker pull"),
+    ):
+        run_constrained(
+            image=_DIGEST,
+            args=[],
+            network="n",
+            mounts=[],
+            limits=_LIMITS,
+        )
 
 
 def test_run_constrained_create_failure_raises() -> None:
