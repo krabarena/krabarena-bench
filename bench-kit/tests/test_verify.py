@@ -28,6 +28,8 @@ from bench_kit.verify import (
     VerifyError,
     _auto_clone,
     _compare_summaries,
+    _default_tolerances,
+    _load_tolerances,
     _resolve_clone_url,
     _verdict_from_diffs,
     verify_bundle,
@@ -256,3 +258,51 @@ def test_auto_clone_rejects_bogus_commit(tmp_path: Path) -> None:
 def test_resolve_clone_url_rejects(bad: str) -> None:
     with pytest.raises(VerifyError):
         _resolve_clone_url(bad)
+
+
+# ---------------------------------------------------------------------------
+# tolerance defaults — schema is the source of truth (SPEC.md §4)
+# ---------------------------------------------------------------------------
+
+
+def test_default_tolerances_are_derived_from_schema() -> None:
+    defaults = _default_tolerances()
+    # Every tolerance key declared in meta.schema.json with a `maximum:`
+    # appears here, with the maximum as the default. The exact set is
+    # frozen by the spec — adding one is a minor bump, removing one is
+    # a major bump — so we assert the membership we expect today.
+    assert defaults["success_rate"] == 0.0
+    assert defaults["wall_clock_ms_p50"] == 0.30
+    assert defaults["wall_clock_ms_p95"] == 0.40
+    assert defaults["wall_clock_ms_p99"] == 0.50
+    assert defaults["peak_rss_mb"] == 0.30
+    assert defaults["cpu_time_ms_p50"] == 0.30
+    assert defaults["throughput"] == 0.30
+
+
+def test_load_tolerances_merges_meta_over_schema_defaults(tmp_path: Path) -> None:
+    """A Battle that omits a tolerance key inherits the schema default
+    for it. Listed keys override. Regression: before this fix, omitted
+    keys silently got 0.0 (exact-match), so any p99 / p95 with a real
+    cross-machine variance would refute every honest verifier.
+    """
+    (tmp_path / "meta.yaml").write_text(
+        "tolerances:\n"
+        "  wall_clock_ms_p50: 0.10\n"  # explicitly tightened
+        "  peak_rss_mb: 0.25\n",  # explicitly tightened
+        encoding="utf-8",
+    )
+    tols = _load_tolerances(tmp_path)
+    # explicit overrides
+    assert tols["wall_clock_ms_p50"] == 0.10
+    assert tols["peak_rss_mb"] == 0.25
+    # schema defaults — not omitted-as-zero
+    assert tols["wall_clock_ms_p95"] == 0.40
+    assert tols["wall_clock_ms_p99"] == 0.50
+    assert tols["success_rate"] == 0.0
+
+
+def test_load_tolerances_handles_missing_block(tmp_path: Path) -> None:
+    (tmp_path / "meta.yaml").write_text("# no tolerances key at all\n", encoding="utf-8")
+    tols = _load_tolerances(tmp_path)
+    assert tols["wall_clock_ms_p99"] == 0.50  # default kicks in

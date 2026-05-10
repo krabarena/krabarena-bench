@@ -54,6 +54,7 @@ import yaml
 from bench_kit import SPEC_VERSION
 from bench_kit.package import BundleMeta, PackageError, read_bundle_json, read_bundle_meta
 from bench_kit.run import RunOptions, run_battle
+from bench_kit.schemas import load_schema
 
 Verdict = Literal["match", "mismatch", "incomplete"]
 VERDICT_MATCH: Verdict = "match"
@@ -410,9 +411,26 @@ def _commit_matches(source_dir: Path, expected: str) -> bool:
 
 
 def _load_tolerances(battle_dir: Path) -> dict[str, float]:
-    meta = yaml.safe_load((battle_dir / "meta.yaml").read_text(encoding="utf-8"))
-    tolerances = meta.get("tolerances") or {}
-    return {k: float(v) for k, v in tolerances.items()}
+    """Resolve tolerances per SPEC.md §4: defaults come from the
+    schema's `maximum:` for each tolerance key (the schema is the
+    single source of truth), and the Battle's `meta.yaml` may
+    tighten — never loosen — them. A metric the schema knows about
+    but the Battle omits gets the schema default; an unknown metric
+    falls back to 0.0 (exact match), since "loosen-the-default" is
+    not allowed per the spec.
+    """
+    resolved = _default_tolerances()
+    meta = yaml.safe_load((battle_dir / "meta.yaml").read_text(encoding="utf-8")) or {}
+    overrides = meta.get("tolerances") or {}
+    for k, v in overrides.items():
+        resolved[k] = float(v)
+    return resolved
+
+
+def _default_tolerances() -> dict[str, float]:
+    schema = load_schema("meta")
+    props = schema["properties"]["tolerances"]["properties"]
+    return {k: float(spec["maximum"]) for k, spec in props.items() if "maximum" in spec}
 
 
 def _compare_summaries(

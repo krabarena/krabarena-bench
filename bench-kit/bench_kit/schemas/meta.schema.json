@@ -110,6 +110,7 @@
         },
         "wall_clock_ms_p50": { "type": "number", "minimum": 0, "maximum": 0.30 },
         "wall_clock_ms_p95": { "type": "number", "minimum": 0, "maximum": 0.40 },
+        "wall_clock_ms_p99": { "type": "number", "minimum": 0, "maximum": 0.50 },
         "peak_rss_mb": { "type": "number", "minimum": 0, "maximum": 0.30 },
         "cpu_time_ms_p50": { "type": "number", "minimum": 0, "maximum": 0.30 },
         "throughput": { "type": "number", "minimum": 0, "maximum": 0.30 }
