@@ -396,6 +396,20 @@ what kind of evidence will be collected.
    own example repo or marketing benchmark. If one tool ships an
    official benchmark suite that maps to your idea, treat that as
    inspiration only — write your own tasks.
+7. **Headlines are rank-order or qualitative, not magnitude.** A
+   Claim's headline finding (the part a verifier checks against)
+   MUST be expressed as a rank-ordering or qualitative invariant —
+   *"tool A passes tasks {X, Y, Z}; tool B passes {X}"*,
+   *"tool A wins more tasks than tool B"*, *"tool A's success rate
+   on canvas-render is 0"*. Absolute numbers (p50 = 653 ms) or
+   ratios (A is 25 % faster than B) MAY appear as illustrative
+   figures, but a Claim's falsifiability gate MUST NOT rest on them.
+   They don't reproduce: same-machine cross-time variance for
+   browser-class tasks routinely exceeds ±100 % at p95, and ratios
+   between two tools can be more volatile than either absolute
+   under asymmetric noise (one runtime degrades under load while
+   the other does not). Rank-order and success-rate reproduce; that
+   is the verifiable substrate.
 
 PRs that violate these rules are rejected during review and the
 PR author is asked to reframe before continuing engineering work.
