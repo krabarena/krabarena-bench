@@ -21,6 +21,7 @@ from bench_kit.exec import (
     ExecError,
     ExecLimits,
     Mount,
+    _best_effort_cleanup,
     _build_create_argv,
     _parse_mb,
     _parse_pct,
@@ -425,6 +426,42 @@ def test_run_constrained_create_failure_raises() -> None:
 _HELLO_WORLD = (
     "library/hello-world@sha256:ec153840d1e635ac434fab5e377081f17e0e15afab27beb3f726c3265039cfff"
 )
+
+
+def test_best_effort_cleanup_swallows_timeout(capsys: pytest.CaptureFixture[str]) -> None:
+    """A `docker rm`/`docker kill` that exceeds its timeout must NOT
+    crash the bench session — every container is created with `--rm`,
+    so a stuck cleanup is at most a transient leak the daemon resolves.
+
+    Regression: `bench verify` against a real bundle on macOS / OrbStack
+    raised `TimeoutExpired` out of `_docker_rm` and aborted the whole
+    verify after the first iteration.
+    """
+
+    def fake_run(argv: list[str], **kwargs: Any) -> Any:
+        raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout", 0))
+
+    with patch("subprocess.run", side_effect=fake_run):
+        _best_effort_cleanup(["rm", "-f", "abc123"], timeout=1.0)
+
+    captured = capsys.readouterr()
+    assert "warning" in captured.err.lower()
+    assert "rm" in captured.err
+    assert "abc123" in captured.err
+
+
+def test_best_effort_cleanup_swallows_oserror(capsys: pytest.CaptureFixture[str]) -> None:
+    """An OSError (docker binary disappeared, EPIPE, …) must also stay
+    contained inside the cleanup path."""
+
+    def fake_run(argv: list[str], **kwargs: Any) -> Any:
+        raise OSError("docker socket gone")
+
+    with patch("subprocess.run", side_effect=fake_run):
+        _best_effort_cleanup(["kill", "abc123"], timeout=1.0)
+
+    captured = capsys.readouterr()
+    assert "warning" in captured.err.lower()
 
 
 def _docker_available() -> bool:

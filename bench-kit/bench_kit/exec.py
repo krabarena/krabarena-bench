@@ -34,6 +34,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -242,8 +243,14 @@ def _format_mount(m: Mount) -> str:
 
 
 _TIMEOUT_CREATE_S = 30.0
-_TIMEOUT_KILL_S = 10.0
-_TIMEOUT_RM_S = 10.0
+# Cleanup ops on macOS / OrbStack / a contended daemon can briefly
+# exceed 10s under load. The container is created with `--rm`, so a
+# slow `docker kill` or `docker rm` is at most a transient leak that
+# the daemon resolves on its own — never worth crashing a verify
+# session over. We give them headroom and treat any timeout as
+# best-effort below.
+_TIMEOUT_KILL_S = 30.0
+_TIMEOUT_RM_S = 30.0
 _TIMEOUT_INSPECT_S = 10.0
 # Pulls of multi-GB Playwright/Chromium images on a fresh CI runner
 # can easily take a few minutes. Generous ceiling so the create
@@ -312,11 +319,31 @@ def _ensure_image_local(image: str) -> None:
 
 
 def _docker_kill(cid: str) -> None:
-    _docker(["kill", cid], timeout=_TIMEOUT_KILL_S)
+    _best_effort_cleanup(["kill", cid], timeout=_TIMEOUT_KILL_S)
 
 
 def _docker_rm(cid: str) -> None:
-    _docker(["rm", "-f", cid], timeout=_TIMEOUT_RM_S)
+    _best_effort_cleanup(["rm", "-f", cid], timeout=_TIMEOUT_RM_S)
+
+
+def _best_effort_cleanup(args: list[str], *, timeout: float) -> None:
+    """Run a ``docker`` cleanup subcommand without ever raising.
+
+    The cleanup path is reached after the run is already accounted
+    for; a timeout or a transient docker error here would otherwise
+    crash the whole bench session for what is at most a stray
+    container the daemon will reap shortly (every container we
+    create uses ``--rm``).
+    """
+    try:
+        _docker(args, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        sys.stderr.write(
+            f"bench: warning: docker {args[0]} {args[-1]} exceeded {timeout:.0f}s; "
+            "leaving cleanup to the daemon\n"
+        )
+    except OSError as exc:
+        sys.stderr.write(f"bench: warning: docker {args[0]} {args[-1]} failed: {exc}\n")
 
 
 # ---------------------------------------------------------------------------
