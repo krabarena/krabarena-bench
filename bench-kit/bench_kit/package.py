@@ -57,13 +57,33 @@ class BundleMeta:
         return asdict(self)
 
 
-def package_bundle(result_path: Path, output_path: Path) -> Path:
+def package_bundle(
+    result_path: Path,
+    output_path: Path,
+    *,
+    readme: Path | None = None,
+    runbook: Path | None = None,
+    structure: Path | None = None,
+) -> Path:
     """Create ``output_path`` from ``result_path``; return ``output_path``.
 
     Validates the input result against ``result.schema.json`` and
     rejects bundles whose ``battle_commit`` is the synthetic nil
     SHA — those cannot be reproduced by any verifier and we'd rather
     fail loudly here than ship an unverifiable Claim.
+
+    Optional documentation/metadata files added at the bundle root:
+
+    * ``readme`` → ``README.md``: extended analysis backing the
+      Claim's Summary / Methodology / Conclusion sections. KrabArena's
+      KrabReviewer requires it for non-blocked publication.
+    * ``runbook`` → ``RUN.md``: reproduction instructions (commands,
+      pinned versions, expected runtime). Same requirement.
+    * ``structure`` → ``structure.json``: machine-readable benchmark
+      metadata + leaderboard for the Claim's rendering.
+
+    Each is opt-in; without them the bundle stays the original
+    pointer-only (meta.json + result.json + runs/) shape.
     """
     if not result_path.is_file():
         msg = f"result file does not exist: {result_path}"
@@ -90,6 +110,7 @@ def package_bundle(result_path: Path, output_path: Path) -> Path:
         )
         raise PackageError(msg)
 
+    extras = _read_extras(readme=readme, runbook=runbook, structure=structure)
     runs_root = result_path.parent / "runs"
 
     meta = BundleMeta(
@@ -114,9 +135,46 @@ def package_bundle(result_path: Path, output_path: Path) -> Path:
     ):
         _add_bytes(tar, "meta.json", json.dumps(meta.to_dict(), indent=2).encode("utf-8"))
         _add_bytes(tar, "result.json", result_path.read_bytes())
+        for arcname, data in extras.items():
+            _add_bytes(tar, arcname, data)
         if runs_root.is_dir():
             _add_runs_tree(tar, runs_root)
     return output_path
+
+
+def _read_extras(
+    *,
+    readme: Path | None,
+    runbook: Path | None,
+    structure: Path | None,
+) -> dict[str, bytes]:
+    """Read the optional doc files and return ``{arcname: bytes}``.
+
+    Sorted by arcname so iteration order in :func:`package_bundle`
+    is deterministic. Missing source files raise :class:`PackageError`
+    with a clear message — silently skipping a passed flag would
+    quietly drop the file from the bundle.
+    """
+    sources: tuple[tuple[str, Path | None], ...] = (
+        ("README.md", readme),
+        ("RUN.md", runbook),
+        ("structure.json", structure),
+    )
+    out: dict[str, bytes] = {}
+    for arcname, source in sources:
+        if source is None:
+            continue
+        if not source.is_file():
+            msg = f"--{arcname.split('.')[0].lower()} file does not exist: {source}"
+            raise PackageError(msg)
+        if arcname == "structure.json":
+            try:
+                json.loads(source.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                msg = f"structure file is not valid JSON: {exc}"
+                raise PackageError(msg) from exc
+        out[arcname] = source.read_bytes()
+    return out
 
 
 def _add_bytes(tar: tarfile.TarFile, arcname: str, data: bytes) -> None:

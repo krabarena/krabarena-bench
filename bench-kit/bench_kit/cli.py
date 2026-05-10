@@ -126,6 +126,24 @@ def _add_package(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> No
         default=Path("claim.tar.gz"),
         help="output bundle path (default: claim.tar.gz in cwd)",
     )
+    p.add_argument(
+        "--readme",
+        type=Path,
+        default=None,
+        help="path to a README.md to embed at the bundle root (extended analysis)",
+    )
+    p.add_argument(
+        "--runbook",
+        type=Path,
+        default=None,
+        help="path to a RUN.md to embed at the bundle root (reproduction instructions)",
+    )
+    p.add_argument(
+        "--structure",
+        type=Path,
+        default=None,
+        help="path to a structure.json to embed at the bundle root (leaderboard / cost)",
+    )
     p.set_defaults(_handler=_handle_package)
 
 
@@ -225,7 +243,13 @@ def _handle_run(args: argparse.Namespace) -> int:
 
 def _handle_package(args: argparse.Namespace) -> int:
     try:
-        out = package_bundle(args.result, args.output)
+        out = package_bundle(
+            args.result,
+            args.output,
+            readme=args.readme,
+            runbook=args.runbook,
+            structure=args.structure,
+        )
     except PackageError as exc:
         print(f"bench package: {exc}", file=sys.stderr)
         return EXIT_RUNTIME_FAILED
