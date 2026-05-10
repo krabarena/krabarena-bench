@@ -16,5 +16,9 @@ success_predicate: "output.total_items == expected.total_items"
 timeout_s: 60
 iterations: 3
 limits:
+  # 2 cpus is plenty — concurrency=10 stresses browser CDP throughput,
+  # not host CPU, and stays within the 2-core ceiling of standard
+  # GHA ubuntu runners. memory_mb sized for 10 simultaneous Chromium
+  # contexts with comfortable headroom.
   memory_mb: 4096
-  cpus: 4
+  cpus: 2
