@@ -137,6 +137,7 @@ def run_constrained(
         msg = "docker CLI not found on PATH; install Docker to run benchmarks"
         raise ExecError(msg)
 
+    _ensure_image_local(image)
     create_argv = _build_create_argv(image, args, network, mounts, limits, env)
     cid = _docker_create(create_argv)
 
@@ -243,6 +244,11 @@ def _format_mount(m: Mount) -> str:
 _TIMEOUT_CREATE_S = 30.0
 _TIMEOUT_KILL_S = 10.0
 _TIMEOUT_RM_S = 10.0
+_TIMEOUT_INSPECT_S = 10.0
+# Pulls of multi-GB Playwright/Chromium images on a fresh CI runner
+# can easily take a few minutes. Generous ceiling so the create
+# timeout above stays tight for the in-cache path.
+_TIMEOUT_PULL_S = 600.0
 
 
 def _docker(args: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
@@ -282,6 +288,27 @@ def _docker_create(argv: list[str]) -> str:
         msg = "docker create produced no container id"
         raise ExecError(msg)
     return cid
+
+
+def _ensure_image_local(image: str) -> None:
+    """Pull ``image`` if it isn't already in the local Docker store.
+
+    Without this, ``docker create`` does the pull implicitly inside
+    its own short timeout — which the multi-GB Playwright + Chromium
+    images cannot complete on a cold-cache CI runner. Running an
+    explicit pull with a generous ceiling ahead of create keeps the
+    in-cache fast path tight and the cold-cache path slow-but-honest.
+    """
+    inspect = _docker(["image", "inspect", image], timeout=_TIMEOUT_INSPECT_S)
+    if inspect.returncode == 0:
+        return
+    pull = _docker(["pull", "--quiet", image], timeout=_TIMEOUT_PULL_S)
+    if pull.returncode != 0:
+        msg = (
+            f"docker pull {image} failed (exit {pull.returncode}): "
+            f"{pull.stderr.strip() or pull.stdout.strip()}"
+        )
+        raise ExecError(msg)
 
 
 def _docker_kill(cid: str) -> None:
