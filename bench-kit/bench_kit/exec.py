@@ -43,11 +43,15 @@ from bench_kit.lint import IMAGE_DIGEST_RE
 from bench_kit.runner_base import RunMetrics, RunResult, Task
 
 _DOCKER = "docker"
-_STATS_POLL_INTERVAL_S = 0.2
 _KILL_GRACE_S = 1.0
+_STATS_TERMINATE_GRACE_S = 2.0
 _DEFAULT_PIDS_LIMIT = 256
 _TMPFS_SPEC = "/tmp:size=512m,rw,nosuid,nodev"
 _USER = "1000:1000"
+# `docker stats` emits ANSI cursor-control sequences around each JSON
+# line even with `--format` (it draws a "live" table by default).
+# Strip them before json.loads.
+_ANSI_RE = re.compile(r"\x1b\[[\d;]*[a-zA-Z]")
 
 
 class ExecError(Exception):
@@ -239,7 +243,6 @@ def _format_mount(m: Mount) -> str:
 _TIMEOUT_CREATE_S = 30.0
 _TIMEOUT_KILL_S = 10.0
 _TIMEOUT_RM_S = 10.0
-_TIMEOUT_STATS_S = 3.0
 
 
 def _docker(args: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
@@ -290,7 +293,7 @@ def _docker_rm(cid: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# stats polling
+# stats streaming
 # ---------------------------------------------------------------------------
 
 
@@ -299,21 +302,52 @@ def _poll_stats(
     samples: list[dict[str, str]],
     stop: threading.Event,
 ) -> None:
-    """Poll ``docker stats --no-stream`` until ``stop`` is set."""
-    while not stop.is_set():
-        try:
-            proc = _docker(
-                ["stats", "--no-stream", "--format", "{{json .}}", cid],
-                timeout=_TIMEOUT_STATS_S,
-            )
-        except subprocess.TimeoutExpired:
-            stop.wait(_STATS_POLL_INTERVAL_S)
-            continue
-        line = proc.stdout.strip()
-        if proc.returncode == 0 and line:
+    """Stream ``docker stats <cid>`` line-by-line until ``stop`` is set.
+
+    Replaces the older `--no-stream` polling loop, which on macOS spent
+    ~50-100 ms per fork — long enough that sub-1s containers produced
+    zero samples and `peak_rss_mb` was always 0 in the result. Using
+    one streaming Popen, samples land in the list as fast as Docker
+    emits them; a watcher thread terminates the process when the
+    caller signals stop, so the main reader exits naturally on EOF.
+    """
+    try:
+        proc = subprocess.Popen(
+            [_DOCKER, "stats", "--format", "{{json .}}", cid],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (FileNotFoundError, OSError):
+        return
+    if proc.stdout is None:
+        proc.terminate()
+        return
+
+    def _terminate_when_stopped() -> None:
+        stop.wait()
+        with contextlib.suppress(ProcessLookupError):
+            proc.terminate()
+
+    watcher = threading.Thread(target=_terminate_when_stopped, daemon=True)
+    watcher.start()
+
+    try:
+        for line in proc.stdout:
+            stripped = _ANSI_RE.sub("", line).strip()
+            if not stripped:
+                continue
             with contextlib.suppress(json.JSONDecodeError):
-                samples.append(json.loads(line))
-        stop.wait(_STATS_POLL_INTERVAL_S)
+                samples.append(json.loads(stripped))
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            proc.terminate()
+        try:
+            proc.wait(timeout=_STATS_TERMINATE_GRACE_S)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                proc.wait(timeout=1.0)
 
 
 def _summarise_samples(samples: list[dict[str, str]]) -> tuple[int, float]:
