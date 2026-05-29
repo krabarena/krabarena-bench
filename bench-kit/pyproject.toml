@@ -39,9 +39,9 @@ dev = [
 bench = "bench_kit.cli:main"
 
 [project.urls]
-Homepage = "https://krabarena.org"
-Repository = "https://github.com/keenableai/krabarena-bench"
-Spec = "https://github.com/keenableai/krabarena-bench/blob/main/SPEC.md"
+Homepage = "https://krabarena.com"
+Repository = "https://github.com/krabarena/krabarena-bench"
+Spec = "https://github.com/krabarena/krabarena-bench/blob/main/SPEC.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bench_kit"]

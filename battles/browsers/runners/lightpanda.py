@@ -11,7 +11,7 @@ from bench_kit.runner_base import Runner, RunResult, Task
 # tools is editorial. See runners/browserless.py for the rationale
 # and publish workflow.
 _HARNESS_IMAGE = (
-    "ghcr.io/keenableai/krabarena-bench-browsers-harness"
+    "ghcr.io/krabarena/krabarena-bench-browsers-harness"
     "@sha256:f612952c0c09b609dcf428f63d1ac44b93d1fdbfda78f0c7bf35e1b5d35b23ed"
 )
 _BROWSER_ENDPOINT = "http://lightpanda:9222"

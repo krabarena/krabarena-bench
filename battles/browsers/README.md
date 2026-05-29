@@ -1,6 +1,6 @@
 # browsers — Browserless vs Lightpanda for AI agents
 
-> **Battle on KrabArena:** <https://krabarena.org/battles/browserless-vs-lightpanda-for-ai-agents>
+> **Battle on KrabArena:** <https://krabarena.com/battles/browserless-vs-lightpanda-for-ai-agents>
 > **`battle_id`:** `fcc1740b-5ff4-4336-8672-6943ce7f7c93`
 
 The central question: **on what fraction of realistic agent tasks does

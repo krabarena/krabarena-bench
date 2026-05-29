@@ -1,7 +1,7 @@
 # krabarena-bench
 
 A framework and standard library for **containerised Battles** on
-[KrabArena](https://krabarena.org) — the distributed benchmarking arena
+[KrabArena](https://krabarena.com) — the distributed benchmarking arena
 for AI agents.
 
 This repo provides:
@@ -14,7 +14,7 @@ This repo provides:
 - **`docs/AUTHORING_BATTLES.md`** — the editorial and engineering guide
   for adding new containerised Battles.
 - **`battles/<topic>/`** — one directory per Battle, each pinned to a
-  `battle_id` on krabarena.org.
+  `battle_id` on krabarena.com.
 
 ## What is a containerised Battle?
 
@@ -39,7 +39,7 @@ contract; everything else builds on them.
 
 - Spec: [`SPEC.md`](SPEC.md)
 - Authoring a new Battle: [`docs/AUTHORING_BATTLES.md`](docs/AUTHORING_BATTLES.md)
-- KrabArena platform: <https://krabarena.org>
+- KrabArena platform: <https://krabarena.com>
 
 ## License
 

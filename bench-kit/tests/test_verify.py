@@ -189,16 +189,16 @@ def test_verify_keep_source_must_be_empty(tmp_path: Path) -> None:
     ("repo", "expected"),
     [
         (
-            "github.com/keenableai/krabarena-bench",
-            "https://github.com/keenableai/krabarena-bench.git",
+            "github.com/krabarena/krabarena-bench",
+            "https://github.com/krabarena/krabarena-bench.git",
         ),
         (
-            "https://github.com/keenableai/krabarena-bench",
-            "https://github.com/keenableai/krabarena-bench.git",
+            "https://github.com/krabarena/krabarena-bench",
+            "https://github.com/krabarena/krabarena-bench.git",
         ),
         (
-            "https://github.com/keenableai/krabarena-bench.git",
-            "https://github.com/keenableai/krabarena-bench.git",
+            "https://github.com/krabarena/krabarena-bench.git",
+            "https://github.com/krabarena/krabarena-bench.git",
         ),
     ],
 )
@@ -214,7 +214,7 @@ def test_resolve_clone_url_accepts(repo: str, expected: str) -> None:
 # `octocat/Hello-World` is a small, public, very-stable demo repo
 # GitHub maintains specifically as a target for examples and tests.
 # We use it instead of this very repo for the network integration so
-# the test works regardless of `keenableai/krabarena-bench`'s visibility.
+# the test works regardless of `krabarena/krabarena-bench`'s visibility.
 _PUBLIC_TEST_REPO = "github.com/octocat/Hello-World"
 _PUBLIC_TEST_COMMIT = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 
@@ -245,9 +245,9 @@ def test_auto_clone_rejects_bogus_commit(tmp_path: Path) -> None:
         # Plain HTTP is MITM-tamperable; verify executes runner code from
         # the clone, so we refuse it.
         "http://example.com/foo",
-        "http://github.com/keenableai/krabarena-bench",
-        "git@github.com:keenableai/krabarena-bench.git",
-        "ssh://git@github.com/keenableai/krabarena-bench.git",
+        "http://github.com/krabarena/krabarena-bench",
+        "git@github.com:krabarena/krabarena-bench.git",
+        "ssh://git@github.com/krabarena/krabarena-bench.git",
         "file:///etc/passwd",
         "",
         "   ",

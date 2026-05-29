@@ -78,7 +78,7 @@ bundle; `bench verify` reproduces and diffs them.
 {
   "schema_version": "0.1.0",
   "battle_id": "550e8400-e29b-41d4-a716-446655440000",
-  "battle_repo": "github.com/keenableai/krabarena-bench",
+  "battle_repo": "github.com/krabarena/krabarena-bench",
   "battle_commit": "abc123def4567890abc123def4567890abc12345",
   "ran_at": "2026-05-06T18:23:00Z",
   "env": { ... },

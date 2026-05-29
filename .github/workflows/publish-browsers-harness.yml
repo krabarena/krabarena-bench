@@ -50,8 +50,16 @@ jobs:
           # (printed in the job summary below), so a static semver tag
           # would just be a lie waiting to drift.
           tags: |
-            ghcr.io/keenableai/krabarena-bench-browsers-harness:${{ github.sha }}
-            ghcr.io/keenableai/krabarena-bench-browsers-harness:latest
+            ghcr.io/krabarena/krabarena-bench-browsers-harness:${{ github.sha }}
+            ghcr.io/krabarena/krabarena-bench-browsers-harness:latest
+          # `org.opencontainers.image.source` links the GHCR package
+          # to this public repo, so the package inherits the repo's
+          # public visibility automatically — verifiers can pull
+          # without auth, no per-package visibility flip needed.
+          labels: |
+            org.opencontainers.image.source=https://github.com/krabarena/krabarena-bench
+            org.opencontainers.image.description=Playwright + playwright npm harness for the browsers Battle on KrabArena
+            org.opencontainers.image.licenses=Apache-2.0
           # Scoped cache so this workflow can't be evicted by louder
           # neighbours sharing the repo's GHA cache budget.
           cache-from: type=gha,scope=browsers-harness
@@ -63,7 +71,7 @@ jobs:
             echo "## Published image"
             echo ""
             echo "\`\`\`"
-            echo "ghcr.io/keenableai/krabarena-bench-browsers-harness@${{ steps.build.outputs.digest }}"
+            echo "ghcr.io/krabarena/krabarena-bench-browsers-harness@${{ steps.build.outputs.digest }}"
             echo "\`\`\`"
             echo ""
             echo "Update both runners' \`_HARNESS_IMAGE\` constant to this digest."

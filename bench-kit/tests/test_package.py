@@ -19,7 +19,7 @@ def _write_minimal_result(result_path: Path, *, commit: str = _GOOD_COMMIT) -> N
     result = {
         "schema_version": "0.1.0",
         "battle_id": "550e8400-e29b-41d4-a716-446655440000",
-        "battle_repo": "github.com/keenableai/krabarena-bench",
+        "battle_repo": "github.com/krabarena/krabarena-bench",
         "battle_commit": commit,
         "ran_at": "2026-05-07T05:44:56Z",
         "env": {
@@ -93,7 +93,7 @@ def test_package_meta_has_pointer_fields(tmp_path: Path) -> None:
     package_bundle(result_path, bundle)
 
     meta = read_bundle_meta(bundle)
-    assert meta.battle_repo == "github.com/keenableai/krabarena-bench"
+    assert meta.battle_repo == "github.com/krabarena/krabarena-bench"
     assert meta.battle_commit == _GOOD_COMMIT
     assert meta.bundle_version == "0.1.0"
     assert meta.bench_kit_version  # non-empty
