@@ -233,6 +233,12 @@ def _find_runner_class(module: object, path: Path) -> type[Runner]:
 
 
 def _compose_up(compose_path: Path, project: str) -> str:
+    # 300s budget (was 120s) so battles with several heavyweight
+    # services — e.g. the browsers Battle, where Selenium 4 +
+    # Chromium + a Browserless + Lightpanda + chromedp + nginx +
+    # the app fixture all need to be Healthy before any task runs
+    # — actually fit. 120s was a tight cap that worked for 2-3
+    # services, broke once the battle grew to 6.
     proc = subprocess.run(
         [
             "docker",
@@ -247,7 +253,7 @@ def _compose_up(compose_path: Path, project: str) -> str:
         ],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=300,
         check=False,
     )
     if proc.returncode != 0:

@@ -102,6 +102,44 @@ services:
       retries: 10
       start_period: 3s
 
+  selenium:
+    # seleniarm/standalone-chromium — the community arm64 build of
+    # selenium/standalone-chrome (Google doesn't publish arm64 Chrome,
+    # so the upstream image is amd64-only). Same Selenium 4 server
+    # surface; the `se:cdp` capability that Playwright connectOverCDP
+    # consumes is identical.
+    #
+    # `SE_NODE_HOST=selenium` makes Selenium advertise the CDP
+    # endpoint with the Compose service hostname instead of its raw
+    # bridge IP (172.17.0.x), so the harness on the bench network
+    # can resolve it via DNS.
+    image: seleniarm/standalone-chromium@sha256:d644a5f679e83e63344cee11c08fc2c7bf4acf43217434a8621a2bc85f7473a5
+    networks: [bench]
+    environment:
+      SE_NODE_HOST: selenium
+      SE_NODE_PORT: "4444"
+      # Default max-sessions=1 means each task's session locks out the
+      # next until session-timeout (300s default) expires. Bench tasks
+      # run sequentially but multiple iterations per task — bump to 5
+      # so concurrent runs don't block each other.
+      SE_NODE_MAX_SESSIONS: "5"
+      SE_NODE_OVERRIDE_MAX_SESSIONS: "true"
+      # Short session timeout reaps leaked sessions quickly so the
+      # pool doesn't bottleneck across the 99-iteration run.
+      SE_NODE_SESSION_TIMEOUT: "30"
+    healthcheck:
+      # Selenium returns pretty-printed JSON (`"ready": true` with a
+      # space), so a literal-substring grep with `"ready":true`
+      # never matches — even though the server is up. Use python's
+      # JSON parser to read `value.ready` directly.
+      test:
+        - "CMD-SHELL"
+        - "curl -fsS http://127.0.0.1:4444/wd/hub/status | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin)[\"value\"][\"ready\"] else 1)' || exit 1"
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
   app:
     build: ./app
     networks: [bench]
