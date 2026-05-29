@@ -32,3 +32,8 @@ claim.tar.gz
 
 # Docker layer caches if any local
 .docker-cache/
+
+# Battle fixture local builds (e.g. battles/*/fixtures/app/node_modules) —
+# these are produced by the fixture's Dockerfile's `npm install`, not
+# part of the repo.
+**/node_modules/
