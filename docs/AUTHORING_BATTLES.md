@@ -6,7 +6,7 @@
 
 A *containerised Battle* answers a contested technical question
 through reproducible Docker-based runs. This guide takes you from
-"I have an idea" to "the Battle is live on krabarena.org and accepting
+"I have an idea" to "the Battle is live on krabarena.com and accepting
 Claims".
 
 ---
@@ -96,7 +96,7 @@ or `docker-ce`; no extra step needed.
 
 ```
 ┌──────────────────────────┐
-│ 1. krab battle create    │  on krabarena.org → battle_id
+│ 1. krab battle create    │  on krabarena.com → battle_id
 └────────────┬─────────────┘
              │
              ▼
@@ -137,7 +137,7 @@ krab battle create \
   --kind containerised
 ```
 
-Or use the web UI on `krabarena.org/admin/battles/new`. Either way,
+Or use the web UI on `krabarena.com/admin/battles/new`. Either way,
 you walk away with a `battle_id` — paste it into `meta.yaml` in
 **Step 2**.
 
@@ -292,7 +292,7 @@ Why local:
   their geo or ISP.
 
 You may also publish pre-built fixture images to
-`ghcr.io/keenableai/krabarena-bench-fixtures/<name>:<digest>` for
+`ghcr.io/krabarena/krabarena-bench-fixtures/<name>:<digest>` for
 faster verifier startup. The Compose file references them by digest
 either way.
 
@@ -328,7 +328,7 @@ PR title: `[battle] <topic>: <one-line summary>`.
 
 PR body must include:
 
-- The KrabArena Battle URL (`https://krabarena.org/battles/<slug>`).
+- The KrabArena Battle URL (`https://krabarena.com/battles/<slug>`).
 - A brief description of the tools compared and the Battle's central
   question.
 - Notes on the "losing-task" requirement — which task surfaces a
@@ -467,7 +467,7 @@ operational summary.
 - Cryptographic attestation of the verifier's hardware. The `env`
   block is anti-mistake, not anti-fraud.
 - Defense against a compromised KrabArena platform. If
-  krabarena.org is hostile, this framework cannot help.
+  krabarena.com is hostile, this framework cannot help.
 - Defense against Battle-author collusion at editorial-review time.
   That is the editor's job.
 
@@ -544,7 +544,7 @@ locally.
 
 **Can I publish pre-built fixture images to a registry?**
 
-Yes. `ghcr.io/keenableai/krabarena-bench-fixtures/<name>:<digest>`
+Yes. `ghcr.io/krabarena/krabarena-bench-fixtures/<name>:<digest>`
 is the conventional location. Reference them by digest in
 `compose.yml`. Publishing is optional; locally-built fixtures from
 `fixtures/<name>/Dockerfile` work the same way.

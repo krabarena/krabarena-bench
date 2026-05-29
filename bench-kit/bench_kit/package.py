@@ -4,7 +4,7 @@ The bundle is **pointer-only** — see SPEC §1 (vocabulary) and §3.1.
 It contains the result, per-iteration logs, and a small ``meta.json``
 header pointing at ``battle_repo + battle_commit``. It does **not**
 contain Battle source code; verifiers fetch the same commit out of
-``github.com/keenableai/krabarena-bench`` themselves.
+``github.com/krabarena/krabarena-bench`` themselves.
 
 This lets the artefact stay tiny (~hundreds of KB instead of MB), and
 removes a class of supply-chain bugs where a Claimer could ship a

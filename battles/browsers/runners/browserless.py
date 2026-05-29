@@ -16,7 +16,7 @@ from bench_kit.runner_base import Runner, RunResult, Task
 # The image we're *benchmarking* is `image` below — this is purely
 # the harness driving it.
 _HARNESS_IMAGE = (
-    "ghcr.io/keenableai/krabarena-bench-browsers-harness"
+    "ghcr.io/krabarena/krabarena-bench-browsers-harness"
     "@sha256:f612952c0c09b609dcf428f63d1ac44b93d1fdbfda78f0c7bf35e1b5d35b23ed"
 )
 _BROWSER_ENDPOINT = "ws://browserless:3000?token=krabarena"

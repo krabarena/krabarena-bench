@@ -56,7 +56,7 @@ tolerances:
 _README_TEMPLATE = """\
 # {slug}
 
-> **Battle on KrabArena:** <https://krabarena.org/battles/{slug}>
+> **Battle on KrabArena:** <https://krabarena.com/battles/{slug}>
 
 One-paragraph description of the central question this Battle answers.
 
@@ -166,7 +166,7 @@ def _validate_battle_id(battle_id: str) -> None:
         raise InitError(msg)
     # Require canonical hyphenated form. ``uuid.UUID`` happily parses
     # 32-hex-no-hyphens, but every other tool in the toolchain
-    # (krabarena.org URLs, Postgres, JSON Schema "uuid" format) wants
+    # (krabarena.com URLs, Postgres, JSON Schema "uuid" format) wants
     # the canonical form, so reject the unhyphenated input here.
     if str(parsed) != battle_id.lower():
         msg = f"battle_id must be in canonical 8-4-4-4-12 hyphenated form, got {battle_id!r}"

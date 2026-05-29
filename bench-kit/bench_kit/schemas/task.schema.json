@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://krabarena.org/schemas/bench/task.schema.json",
+  "$id": "https://krabarena.com/schemas/bench/task.schema.json",
   "title": "krabarena-bench task YAML",
   "description": "One scenario every tool must run. Conforms to AUTHORING_BATTLES §6.",
   "type": "object",

@@ -70,7 +70,7 @@ def _add_init(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     battle.add_argument(
         "--battle-id",
         required=True,
-        help="UUID of the Battle on krabarena.org (from `krab battle create`)",
+        help="UUID of the Battle on krabarena.com (from `krab battle create`)",
     )
     battle.add_argument(
         "--out",

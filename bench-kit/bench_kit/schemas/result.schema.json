@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://krabarena.org/schemas/bench/result.schema.json",
+  "$id": "https://krabarena.com/schemas/bench/result.schema.json",
   "title": "krabarena-bench result.json",
   "description": "Canonical machine-readable output of `bench run`. Conforms to SPEC.md.",
   "type": "object",
@@ -30,7 +30,7 @@
     "battle_repo": {
       "type": "string",
       "minLength": 1,
-      "description": "Canonical repository slug, e.g. \"github.com/keenableai/krabarena-bench\"."
+      "description": "Canonical repository slug, e.g. \"github.com/krabarena/krabarena-bench\"."
     },
     "battle_commit": {
       "type": "string",

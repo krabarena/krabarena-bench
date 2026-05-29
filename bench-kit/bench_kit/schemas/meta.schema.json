@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://krabarena.org/schemas/bench/meta.schema.json",
+  "$id": "https://krabarena.com/schemas/bench/meta.schema.json",
   "title": "krabarena-bench meta.yaml",
   "description": "Per-Battle metadata. Conforms to SPEC.md §4.",
   "type": "object",

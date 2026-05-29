@@ -59,7 +59,7 @@ class RunOptions:
     results_dir: Path | None = None
     """Override results root; defaults to ``<battle_dir>/results``."""
 
-    battle_repo: str = "github.com/keenableai/krabarena-bench"
+    battle_repo: str = "github.com/krabarena/krabarena-bench"
     """Canonical repo slug recorded in ``result.json``."""
 
 
