@@ -17,8 +17,8 @@ services:
         - "wget -q --tries=1 -O - 'http://127.0.0.1:3000/json/version?token=krabarena' || exit 1"
       interval: 5s
       timeout: 3s
-      retries: 20
-      start_period: 15s  # Browserless boots a real Chromium; spare the noise during boot.
+      retries: 30
+      start_period: 30s  # Browserless boots a real Chromium; spare the noise during boot.
 
   lightpanda:
     image: lightpanda/browser@sha256:0283ba962dffe2f7b46a29377276837b033b1174b92b5a30da641a1b1561ef5c
@@ -53,6 +53,54 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
+
+  chrome-internal:
+    # chromedp/headless-shell — raw upstream Chromium with
+    # --remote-debugging-port=9223 (chrome) bridged to :9222 via
+    # socat in the image's own ENTRYPOINT. The "control" experiment:
+    # shows how much overhead Browserless's session-management layer
+    # adds vs unwrapped headless Chrome.
+    #
+    # Reachable only as `chrome-internal:9222`. The `headless-shell`
+    # service below is an nginx Host-rewrite front-door because raw
+    # Chrome's DNS-rebinding protection refuses requests whose Host
+    # header isn't an IP or "localhost" — Playwright sends
+    # `Host: chrome-internal:9222` on both HTTP and WS upgrades and
+    # Chrome returns 500 "Host header is specified and is not an IP
+    # address or localhost". The nginx layer rewrites Host → localhost
+    # so Chrome accepts. See battles/browsers/fixtures/nginx.conf.
+    image: chromedp/headless-shell@sha256:313ed7255ae1e155fb157631a6d4c0eb8b65bbe06de9e704ed834399bdf678ff
+    networks: [bench]
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9222' || exit 1"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  headless-shell:
+    # nginx front-door for chrome-internal. Rewrites the Host header
+    # to localhost:9222 on every request (HTTP and WS) so raw Chrome's
+    # DNS-rebinding protection passes. WebSocket upgrade is preserved
+    # via standard Upgrade/Connection proxying.
+    #
+    # Pinned to a specific multi-arch manifest digest so the same
+    # bytes run for claimer + verifier.
+    image: nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    networks: [bench]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      chrome-internal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O - http://127.0.0.1:9222/json/version || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 3s
 
   app:
     build: ./app
