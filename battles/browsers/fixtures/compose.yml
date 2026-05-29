@@ -17,8 +17,8 @@ services:
         - "wget -q --tries=1 -O - 'http://127.0.0.1:3000/json/version?token=krabarena' || exit 1"
       interval: 5s
       timeout: 3s
-      retries: 20
-      start_period: 15s  # Browserless boots a real Chromium; spare the noise during boot.
+      retries: 30
+      start_period: 30s  # Browserless boots a real Chromium; spare the noise during boot.
 
   lightpanda:
     image: lightpanda/browser@sha256:0283ba962dffe2f7b46a29377276837b033b1174b92b5a30da641a1b1561ef5c
@@ -53,6 +53,34 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
+
+  headless-shell:
+    # chromedp/headless-shell — raw upstream Chromium with
+    # --remote-debugging-port=9223 (chrome) bridged to :9222 via
+    # socat in the image's own ENTRYPOINT. No service-layer wrapper.
+    # The "control" experiment: shows how much overhead Browserless's
+    # session-management layer adds vs unwrapped headless Chrome.
+    # Multi-arch manifest list digest (linux/amd64 + linux/arm64).
+    #
+    # IMPORTANT: do NOT pass `--remote-debugging-port=9222` here. The
+    # image's ENTRYPOINT already does `socat 9222→127.0.0.1:9223` and
+    # launches chrome on :9223. Overriding the port flag double-binds
+    # 9222 and the inner chrome falls back to IPv6-only on ::1,
+    # leaving socat with nothing to route. Trust the image default.
+    image: chromedp/headless-shell@sha256:313ed7255ae1e155fb157631a6d4c0eb8b65bbe06de9e704ed834399bdf678ff
+    networks: [bench]
+    healthcheck:
+      # chromedp/headless-shell ships bash + socat but NOT wget/curl,
+      # so we probe at the TCP layer via bash's /dev/tcp — same trick
+      # the lightpanda service uses. Sufficient to confirm socat is
+      # bridging 9222 → inner chrome on :9223.
+      test:
+        - "CMD-SHELL"
+        - "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9222' || exit 1"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
   app:
     build: ./app
