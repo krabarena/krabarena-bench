@@ -17,7 +17,7 @@ from bench_kit.runner_base import Runner, RunResult, Task
 # the harness driving it.
 _HARNESS_IMAGE = (
     "ghcr.io/krabarena/krabarena-bench-browsers-harness"
-    "@sha256:f612952c0c09b609dcf428f63d1ac44b93d1fdbfda78f0c7bf35e1b5d35b23ed"
+    "@sha256:7e91d0edd21b24332e21d657330a0f6c48d7450e51b219b2b53bb9b646ee9e7d"
 )
 _BROWSER_ENDPOINT = "ws://browserless:3000?token=krabarena"
 
